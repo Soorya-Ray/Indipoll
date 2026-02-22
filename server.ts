@@ -5,7 +5,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 const app = express();
-const PORT = 3000;
+const PORT = parseInt(process.env.PORT || "3000", 10);
 
 /** SQLite database — auto-created on first run in the project root. */
 const db = new Database("indipoll.db");
