@@ -1,0 +1,5 @@
+{
+  "name": "IndiPoll - Pollution Monitoring & Prediction",
+  "description": "A comprehensive system for monitoring regional pollution metrics, climate data, and AI-driven predictions.",
+  "requestFramePermissions": ["geolocation"]
+}
