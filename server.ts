@@ -7,7 +7,7 @@ import { fileURLToPath } from "url";
 const app = express();
 const PORT = 3000;
 
-// Open (or create) the local SQLite database file.
+/** SQLite database — auto-created on first run in the project root. */
 const db = new Database("indipoll.db");
 
 // ---------------------------------------------------------------------------
@@ -113,20 +113,20 @@ const seedRegions = [
   { id: "reg-003", name: "Bangalore", latitude: 12.9716, longitude: 77.5946, country: "India", timezone: "IST" },
 ] as const;
 
-// Typical baseline values per region — used to generate 10 hourly data points each.
-const pollutionBaselines: Record<string, { pm25: number; pm10: number; no2: number; so2: number; co: number; o3: number; aqi: number }> = {
+// Typical baseline values per region — used to generate 10 hourly data-points each.
+const pollutionBaselinesByRegion: Record<string, { pm25: number; pm10: number; no2: number; so2: number; co: number; o3: number; aqi: number }> = {
   "reg-001": { pm25: 168, pm10: 286, no2: 42, so2: 15, co: 1.2, o3: 57, aqi: 332 },
   "reg-002": { pm25: 62, pm10: 105, no2: 31, so2: 9, co: 0.8, o3: 42, aqi: 121 },
   "reg-003": { pm25: 38, pm10: 72, no2: 25, so2: 6, co: 0.6, o3: 36, aqi: 79 },
 };
 
-const climateBaselines: Record<string, { temperature: number; humidity: number; wind_speed: number; wind_direction: number; precipitation: number; pressure: number }> = {
+const climateBaselinesByRegion: Record<string, { temperature: number; humidity: number; wind_speed: number; wind_direction: number; precipitation: number; pressure: number }> = {
   "reg-001": { temperature: 31.8, humidity: 40, wind_speed: 8.4, wind_direction: 285, precipitation: 0.0, pressure: 1002.4 },
   "reg-002": { temperature: 29.2, humidity: 71, wind_speed: 13.1, wind_direction: 246, precipitation: 0.4, pressure: 1008.1 },
   "reg-003": { temperature: 24.6, humidity: 63, wind_speed: 10.2, wind_direction: 218, precipitation: 1.2, pressure: 1010.3 },
 };
 
-const predictionBaselines: Record<string, { aqi: number; confidence: number }> = {
+const predictionBaselinesByRegion: Record<string, { aqi: number; confidence: number }> = {
   "reg-001": { aqi: 318, confidence: 0.87 },
   "reg-002": { aqi: 128, confidence: 0.84 },
   "reg-003": { aqi: 82, confidence: 0.86 },
@@ -134,14 +134,14 @@ const predictionBaselines: Record<string, { aqi: number; confidence: number }> =
 
 /**
  * Apply deterministic sinusoidal variation around a baseline value.
- * Produces realistic-looking chart data without randomness.
+ * Produces realistic-looking time-series data without randomness.
  *
- * @param base  - Centre value to oscillate around
- * @param step  - Current time-step index (0 … N)
- * @param scale - Maximum deviation from the base
+ * @param base      Centre value to oscillate around
+ * @param stepIndex Current time-step index (0 … N)
+ * @param amplitude Maximum deviation from the base
  */
-const vary = (base: number, step: number, scale: number) =>
-  Math.round((base + Math.sin(step * 0.9) * scale + Math.cos(step * 0.5) * scale * 0.4) * 100) / 100;
+const applyVariation = (base: number, stepIndex: number, amplitude: number) =>
+  Math.round((base + Math.sin(stepIndex * 0.9) * amplitude + Math.cos(stepIndex * 0.5) * amplitude * 0.4) * 100) / 100;
 
 // Prepared statements for idempotent seed inserts (INSERT OR IGNORE).
 const insertRegionStmt = db.prepare("INSERT OR IGNORE INTO regions (id, name, latitude, longitude, country, timezone) VALUES (?, ?, ?, ?, ?, ?)");
@@ -166,42 +166,42 @@ for (const region of seedRegions) {
 
   // Seed 10 hourly pollution snapshots (most-recent-first when queried).
   if (!hasPollutionForRegion.get(region.id)) {
-    const pollBaseline = pollutionBaselines[region.id];
+    const pollBase = pollutionBaselinesByRegion[region.id];
     for (let hour = 0; hour < 10; hour++) {
       const timestamp = new Date(seedTimestamp - (9 - hour) * ONE_HOUR_MS).toISOString();
       insertPollutionStmt.run(
         `pol-${region.id}-${hour}`, region.id, timestamp,
-        vary(pollBaseline.pm25, hour, 12), vary(pollBaseline.pm10, hour, 18),
-        vary(pollBaseline.no2, hour, 5), vary(pollBaseline.so2, hour, 2),
-        vary(pollBaseline.co, hour, 0.15), vary(pollBaseline.o3, hour, 6),
-        Math.round(vary(pollBaseline.aqi, hour, 20))
+        applyVariation(pollBase.pm25, hour, 12), applyVariation(pollBase.pm10, hour, 18),
+        applyVariation(pollBase.no2, hour, 5), applyVariation(pollBase.so2, hour, 2),
+        applyVariation(pollBase.co, hour, 0.15), applyVariation(pollBase.o3, hour, 6),
+        Math.round(applyVariation(pollBase.aqi, hour, 20))
       );
     }
   }
 
   // Seed 10 hourly climate snapshots (same timestamps as pollution).
   if (!hasClimateForRegion.get(region.id)) {
-    const climBaseline = climateBaselines[region.id];
+    const climBase = climateBaselinesByRegion[region.id];
     for (let hour = 0; hour < 10; hour++) {
       const timestamp = new Date(seedTimestamp - (9 - hour) * ONE_HOUR_MS).toISOString();
       insertClimateStmt.run(
         `cli-${region.id}-${hour}`, region.id, timestamp,
-        vary(climBaseline.temperature, hour, 1.5), vary(climBaseline.humidity, hour, 4),
-        vary(climBaseline.wind_speed, hour, 2), Math.round(vary(climBaseline.wind_direction, hour, 15)),
-        Math.max(0, vary(climBaseline.precipitation, hour, 0.3)), vary(climBaseline.pressure, hour, 1.5)
+        applyVariation(climBase.temperature, hour, 1.5), applyVariation(climBase.humidity, hour, 4),
+        applyVariation(climBase.wind_speed, hour, 2), Math.round(applyVariation(climBase.wind_direction, hour, 15)),
+        Math.max(0, applyVariation(climBase.precipitation, hour, 0.3)), applyVariation(climBase.pressure, hour, 1.5)
       );
     }
   }
 
   // Seed 3 forward-looking AQI predictions (+24 h, +48 h, +72 h).
   if (!hasPredictionForRegion.get(region.id)) {
-    const predBaseline = predictionBaselines[region.id];
+    const predBase = predictionBaselinesByRegion[region.id];
     for (let dayOffset = 0; dayOffset < 3; dayOffset++) {
       const targetTimestamp = new Date(seedTimestamp + (dayOffset + 1) * 24 * ONE_HOUR_MS).toISOString();
       insertPredictionStmt.run(
         `pre-${region.id}-${dayOffset}`, region.id, targetTimestamp,
-        Math.round(vary(predBaseline.aqi, dayOffset, 15)),
-        Math.round(vary(predBaseline.confidence, dayOffset, 0.03) * 100) / 100,
+        Math.round(applyVariation(predBase.aqi, dayOffset, 15)),
+        Math.round(applyVariation(predBase.confidence, dayOffset, 0.03) * 100) / 100,
         "rf-v1.0"
       );
     }
@@ -213,7 +213,7 @@ app.use(express.json());
 // ---------------------------------------------------------------------------
 // 3. API ROUTES — JSON endpoints consumed by the React frontend.
 // ---------------------------------------------------------------------------
-/** List all monitored regions. */
+/** GET /api/regions — List all monitored regions. */
 app.get("/api/regions", (_req, res) => {
   try {
     const allRegions = db.prepare("SELECT * FROM regions").all();
@@ -224,7 +224,7 @@ app.get("/api/regions", (_req, res) => {
   }
 });
 
-/** Fetch the latest pollution, climate, and prediction data for a region. */
+/** GET /api/metrics/:regionId — Fetch the 10 most recent pollution/climate rows and up to 5 predictions. */
 app.get("/api/metrics/:regionId", (req, res) => {
   try {
     const { regionId } = req.params;
@@ -238,7 +238,7 @@ app.get("/api/metrics/:regionId", (req, res) => {
   }
 });
 
-/** Return SHAP-based feature contributions for a given prediction. */
+/** GET /api/explain/:predictionId — Return SHAP-based feature contributions for a prediction. */
 app.get("/api/explain/:predictionId", (req, res) => {
   try {
     const { predictionId } = req.params;

@@ -4,7 +4,6 @@ import {
   Wind,
   Thermometer,
   MapPin,
-  AlertTriangle,
   Database as DbIcon,
   TrendingUp,
   Info,
@@ -16,8 +15,6 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
-  LineChart,
-  Line,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -29,20 +26,26 @@ import {
 import type { Region, PollutionMetric, ClimateMetric, Prediction } from './types';
 
 export default function App() {
-  // ---- State ---------------------------------------------------------------
-  const [regions, setRegions] = useState<Region[]>([]);            // All regions returned by the API
-  const [selectedRegion, setSelectedRegion] = useState<Region | null>(null);   // Currently active region
-  const [metrics, setMetrics] = useState<{                                     // Pollution, climate & predictions for the selected region
+  // ---- Application State ---------------------------------------------------
+
+  /** All regions fetched from /api/regions on mount. */
+  const [regions, setRegions] = useState<Region[]>([]);
+  /** The region currently selected in the sidebar / pill bar. */
+  const [selectedRegion, setSelectedRegion] = useState<Region | null>(null);
+  /** Combined pollution, climate, and prediction data for the selected region. */
+  const [metrics, setMetrics] = useState<{
     pollution: PollutionMetric[];
     climate: ClimateMetric[];
     predictions: Prediction[];
   } | null>(null);
+  /** Active page/tab shown in the main content area. */
   const [view, setView] = useState<'dashboard' | 'schema' | 'ingestion' | 'prediction' | 'api'>('dashboard');
-  const [searchQuery, setSearchQuery] = useState('');                          // Region search filter text
+  /** Text used to filter the region pill bar (case-insensitive). */
+  const [searchQuery, setSearchQuery] = useState('');
 
-  // ---- Data fetching -------------------------------------------------------
+  // ---- Data Fetching -------------------------------------------------------
 
-  // Load the region list once on mount, then auto-select the first region.
+  /** Load the region list once on mount, then auto-select the first entry. */
   useEffect(() => {
     fetch('/api/regions')
       .then(res => {
@@ -57,8 +60,8 @@ export default function App() {
       .catch(err => console.error('Failed to fetch regions:', err));
   }, []);
 
-  // Fetch metrics whenever the selected region changes.
-  // Clears stale data first; cancels in-flight requests on rapid switches.
+  /** Fetch metrics whenever the selected region changes.
+   *  Clears stale data first and cancels in-flight requests on rapid switches. */
   useEffect(() => {
     if (!selectedRegion) return;
     setMetrics(null);
@@ -81,18 +84,18 @@ export default function App() {
     return () => controller.abort();
   }, [selectedRegion]);
 
-  // ---- AQI helpers ---------------------------------------------------------
+  // ---- AQI Helpers ----------------------------------------------------------
 
-  /** Return a Tailwind text-colour class based on the AQI severity band. */
+  /** Map an AQI value to its Tailwind text-colour class (green → purple). */
   const getAQIColor = (aqi: number) => {
-    if (aqi <= 50) return 'text-emerald-500';
-    if (aqi <= 100) return 'text-yellow-500';
-    if (aqi <= 200) return 'text-orange-500';
-    if (aqi <= 300) return 'text-red-500';
-    return 'text-purple-600';
+    if (aqi <= 50) return 'text-emerald-500';   // Good
+    if (aqi <= 100) return 'text-yellow-500';   // Moderate
+    if (aqi <= 200) return 'text-orange-500';   // Poor
+    if (aqi <= 300) return 'text-red-500';      // Very Poor
+    return 'text-purple-600';                   // Severe
   };
 
-  /** Return a label, description, and background-colour class for an AQI value. */
+  /** Map an AQI value to a label, health description, and Tailwind background class. */
   const getAQIStatus = (aqi: number) => {
     if (aqi <= 50) return { label: 'Good', desc: 'Air quality is satisfactory, and air pollution poses little or no risk.', color: 'bg-emerald-500' };
     if (aqi <= 100) return { label: 'Moderate', desc: 'Air quality is acceptable. However, there may be a risk for some people.', color: 'bg-yellow-500' };
@@ -101,21 +104,21 @@ export default function App() {
     return { label: 'Severe', desc: 'Health warning of emergency conditions: everyone is more likely to be affected.', color: 'bg-purple-600' };
   };
 
-  // ---- Derived state -------------------------------------------------------
+  // ---- Derived State -------------------------------------------------------
 
-  /** Regions matching the current search query (case-insensitive). */
+  /** Subset of regions whose name matches the search query (case-insensitive). */
   const filteredRegions = regions.filter(region =>
     region.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Auto-select the first visible region when filtering hides the current selection.
+  /** Auto-select the first visible region when the search filter hides the current selection. */
   useEffect(() => {
     if (filteredRegions.length === 0) return;
-    const selectionStillVisible = filteredRegions.some(region => region.id === selectedRegion?.id);
-    if (!selectionStillVisible) setSelectedRegion(filteredRegions[0]);
+    const isCurrentSelectionVisible = filteredRegions.some(region => region.id === selectedRegion?.id);
+    if (!isCurrentSelectionVisible) setSelectedRegion(filteredRegions[0]);
   }, [searchQuery]);
 
-  // ---- Render --------------------------------------------------------------
+  // ---- Render ---------------------------------------------------------------
 
   return (
     <div className="min-h-screen bg-[#F8F9FA] text-slate-900 font-sans">

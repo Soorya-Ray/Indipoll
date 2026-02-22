@@ -1,20 +1,79 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# IndiPoll
 
-# Run and deploy your AI Studio app
+Real-time pollution monitoring and AI-driven AQI forecasting platform for Indian regions. Combines environmental sensor data, climate metrics, and a Random Forest prediction engine into a single interactive dashboard.
 
-This contains everything you need to run your app locally.
+## Tech Stack
 
-View your app in AI Studio: https://ai.studio/apps/54f8a9e8-435c-4353-a09e-449bfdbed6cc
+| Layer | Technology |
+|---|---|
+| **Frontend** | React 19, TypeScript, Tailwind CSS 4, Recharts, Motion |
+| **Backend** | Express, better-sqlite3 |
+| **ML Pipeline** | scikit-learn, SHAP, pandas (Python) |
+| **Data Ingestion** | OpenAQ REST API (Python) |
+| **Build Tooling** | Vite 6, tsx |
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────┐
+│  React SPA (App.tsx)                                │
+│  Dashboard · Schema · Ingestion · Prediction · API  │
+└──────────────────────┬──────────────────────────────┘
+                       │ fetch /api/*
+┌──────────────────────▼──────────────────────────────┐
+│  Express Server (server.ts)                         │
+│  GET /api/regions · GET /api/metrics/:id             │
+│  GET /api/explain/:id                               │
+└──────────────────────┬──────────────────────────────┘
+                       │ better-sqlite3
+┌──────────────────────▼──────────────────────────────┐
+│  SQLite (indipoll.db)                               │
+│  regions · pollution_metrics · climate_metrics       │
+│  predictions · model_explanations · data_sources     │
+│  raw_ingest · pollution_sources                      │
+└─────────────────────────────────────────────────────┘
+
+Python scripts (offline):
+  openaq_ingest.py   → raw_ingest
+  transform_ingest.py → pollution_metrics / climate_metrics
+  ml_train.py        → predictions / model_explanations
+```
 
 ## Run Locally
 
-**Prerequisites:**  Node.js
+**Prerequisites:** Node.js ≥ 18, npm
 
+```bash
+# Install dependencies
+npm install
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+# Start dev server (Express + Vite HMR on port 3000)
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000).
+
+### Other Scripts
+
+| Command | Description |
+|---|---|
+| `npm run build` | Production Vite build → `dist/` |
+| `npm start` | Serve production build |
+| `npm run lint` | Type-check with `tsc --noEmit` |
+| `npm run clean` | Remove `dist/` |
+
+## Deployment
+
+1. Build the frontend:
+   ```bash
+   npm run build
+   ```
+2. Start in production mode:
+   ```bash
+   npm start
+   ```
+   This runs `NODE_ENV=production tsx server.ts`, which serves the static `dist/` build and exposes the API on port 3000.
+
+3. The SQLite database (`indipoll.db`) is auto-created and seeded on first startup — no external database setup required.
+
+> **Note:** For production ML workflows, the Python scripts (`ml_train.py`, `openaq_ingest.py`, `transform_ingest.py`) require a PostgreSQL database configured via the `DATABASE_URL` environment variable.

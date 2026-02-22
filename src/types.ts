@@ -1,3 +1,4 @@
+/** A monitored geographic area (city or district). */
 export interface Region {
   id: string;
   name: string;
@@ -7,6 +8,7 @@ export interface Region {
   timezone: string;
 }
 
+/** A single hourly air-quality snapshot for a region. */
 export interface PollutionMetric {
   id: string;
   region_id: string;
@@ -20,6 +22,7 @@ export interface PollutionMetric {
   aqi: number;
 }
 
+/** A single hourly climate reading for a region. */
 export interface ClimateMetric {
   id: string;
   region_id: string;
@@ -32,15 +35,7 @@ export interface ClimateMetric {
   pressure: number;
 }
 
-export interface PollutionSource {
-  id: string;
-  region_id: string;
-  name: string;
-  type: 'Industrial' | 'Traffic' | 'Agricultural' | 'Natural';
-  emission_rate: number;
-  status: 'Active' | 'Inactive';
-}
-
+/** A forward-looking AQI forecast produced by the ML model. */
 export interface Prediction {
   id: string;
   region_id: string;
