@@ -455,7 +455,7 @@ export default function App() {
               <div className="max-w-3xl">
                 <h1 className="text-4xl font-black text-slate-900 mb-4 tracking-tight">Database Architecture</h1>
                 <p className="text-lg text-slate-600 leading-relaxed">
-                  A fully normalized relational schema designed for high-throughput pollution monitoring and predictive analytics.
+                  A normalised relational schema implemented in SQLite, storing multivariate environmental time-series data, seeded prediction forecasts, and structural provisions for future ML explainability.
                 </p>
               </div>
 
@@ -463,24 +463,27 @@ export default function App() {
               <section className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100">
                 <div className="flex items-center gap-3 mb-6">
                   <Layers className="w-6 h-6 text-emerald-600" />
-                  <h2 className="text-2xl font-bold text-slate-800">1. ER Diagram Explanation</h2>
+                  <h2 className="text-2xl font-bold text-slate-800">1. Entity-Relationship Model</h2>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="space-y-4 text-slate-600">
-                    <p>The <strong>IndiPoll</strong> schema follows a star-like snowflake pattern centered around the <code>Regions</code> entity.</p>
+                    <p>The schema employs a star-like topology with <code>regions</code> as the central dimension table, persisted in a single SQLite file (<code>indipoll.db</code>).</p>
                     <ul className="list-disc pl-5 space-y-2">
-                      <li><strong>Regions:</strong> The core dimension table. All metrics and sources are linked to a specific region.</li>
-                      <li><strong>PollutionMetrics & ClimateMetrics:</strong> Fact tables storing high-frequency time-series data.</li>
-                      <li><strong>PollutionSources:</strong> Descriptive table for point-source emitters within a region.</li>
-                      <li><strong>Predictions:</strong> Output table for ML models, linking back to regions for spatial context.</li>
+                      <li><strong>regions:</strong> Primary dimension entity. Every dependent relation references a region through the <code>region_id</code> foreign key.</li>
+                      <li><strong>pollution_metrics & climate_metrics:</strong> Time-series fact tables recording hourly pollutant concentrations and meteorological observations, respectively.</li>
+                      <li><strong>pollution_sources:</strong> Categorical registry of emission sources, constrained to four typologies (Industrial, Traffic, Agricultural, Natural).</li>
+                      <li><strong>predictions:</strong> Stores region-specific AQI forecasts with confidence scores and model version labels. Currently populated by deterministic seed data in <code>server.ts</code>.</li>
+                      <li><strong>model_explanations:</strong> Provisioned for per-prediction SHAP feature contributions. Table is defined but currently empty; will be populated when <code>ml_train.py</code> is executed.</li>
+                      <li><strong>data_sources & raw_ingest:</strong> Provisioned for external API data provenance. Tables are defined but unused at runtime; the application currently relies on in-process seed data.</li>
                     </ul>
                   </div>
                   <div className="bg-slate-900 rounded-2xl p-6 font-mono text-xs text-emerald-400 overflow-x-auto">
                     <pre>{`
-[Regions] 1 --- * [PollutionMetrics]
-          1 --- * [ClimateMetrics]
-          1 --- * [PollutionSources]
-          1 --- * [Predictions]
+[regions] 1 ──* [pollution_metrics]
+          1 ──* [climate_metrics]
+          1 ──* [pollution_sources]
+          1 ──* [predictions] 1 ──* [model_explanations]
+[data_sources] 1 ──* [raw_ingest]
                     `}</pre>
                   </div>
                 </div>
@@ -490,97 +493,112 @@ export default function App() {
               <section className="space-y-6">
                 <div className="flex items-center gap-3">
                   <DbIcon className="w-6 h-6 text-emerald-600" />
-                  <h2 className="text-2xl font-bold text-slate-800">2. Table Structure & 3. SQL Statements</h2>
+                  <h2 className="text-2xl font-bold text-slate-800">2. Table Definitions & DDL Statements</h2>
                 </div>
 
                 <div className="space-y-4">
                   {[
                     {
-                      name: 'Regions',
-                      sql: `CREATE TABLE regions (
-  id UUID PRIMARY KEY,
-  name VARCHAR(255) NOT NULL,
-  latitude DECIMAL(9,6) NOT NULL,
-  longitude DECIMAL(9,6) NOT NULL,
-  country VARCHAR(100) NOT NULL,
-  timezone VARCHAR(50) NOT NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                      name: 'regions',
+                      sql: `CREATE TABLE IF NOT EXISTS regions (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  latitude REAL NOT NULL,
+  longitude REAL NOT NULL,
+  country TEXT NOT NULL,
+  timezone TEXT NOT NULL
 );`
                     },
                     {
-                      name: 'PollutionMetrics',
-                      sql: `CREATE TABLE pollution_metrics (
-  id UUID PRIMARY KEY,
-  region_id UUID REFERENCES regions(id),
-  timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  pm25 DECIMAL(6,2),
-  pm10 DECIMAL(6,2),
-  no2 DECIMAL(6,2),
-  so2 DECIMAL(6,2),
-  co DECIMAL(6,2),
-  o3 DECIMAL(6,2),
+                      name: 'pollution_metrics',
+                      sql: `CREATE TABLE IF NOT EXISTS pollution_metrics (
+  id TEXT PRIMARY KEY,
+  region_id TEXT NOT NULL,
+  timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+  pm25 REAL,
+  pm10 REAL,
+  no2 REAL,
+  so2 REAL,
+  co REAL,
+  o3 REAL,
   aqi INTEGER,
-  CONSTRAINT valid_aqi CHECK (aqi >= 0)
+  FOREIGN KEY (region_id) REFERENCES regions(id)
 );`
                     },
                     {
-                      name: 'ClimateMetrics',
-                      sql: `CREATE TABLE climate_metrics (
-  id UUID PRIMARY KEY,
-  region_id UUID REFERENCES regions(id),
-  timestamp TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  temperature DECIMAL(4,2),
-  humidity DECIMAL(5,2),
-  wind_speed DECIMAL(5,2),
-  wind_direction INTEGER,
-  precipitation DECIMAL(6,2),
-  pressure DECIMAL(6,2)
+                      name: 'climate_metrics',
+                      sql: `CREATE TABLE IF NOT EXISTS climate_metrics (
+  id TEXT PRIMARY KEY,
+  region_id TEXT NOT NULL,
+  timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+  temperature REAL,
+  humidity REAL,
+  wind_speed REAL,
+  wind_direction REAL,
+  precipitation REAL,
+  pressure REAL,
+  FOREIGN KEY (region_id) REFERENCES regions(id)
 );`
                     },
                     {
-                      name: 'PollutionSources',
-                      sql: `CREATE TABLE pollution_sources (
-  id UUID PRIMARY KEY,
-  region_id UUID REFERENCES regions(id),
-  name VARCHAR(255) NOT NULL,
-  type VARCHAR(50) CHECK (type IN ('Industrial', 'Traffic', 'Agricultural', 'Natural')),
-  emission_rate DECIMAL(10,2),
-  status VARCHAR(20) DEFAULT 'Active'
+                      name: 'pollution_sources',
+                      sql: `CREATE TABLE IF NOT EXISTS pollution_sources (
+  id TEXT PRIMARY KEY,
+  region_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  type TEXT CHECK(type IN
+    ('Industrial','Traffic','Agricultural','Natural')),
+  emission_rate REAL,
+  status TEXT CHECK(status IN ('Active','Inactive')),
+  FOREIGN KEY (region_id) REFERENCES regions(id)
 );`
                     },
                     {
-                      name: 'Predictions',
-                      sql: `CREATE TABLE predictions (
-  id UUID PRIMARY KEY,
-  region_id UUID REFERENCES regions(id),
-  prediction_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  target_timestamp TIMESTAMP NOT NULL,
+                      name: 'predictions',
+                      sql: `CREATE TABLE IF NOT EXISTS predictions (
+  id TEXT PRIMARY KEY,
+  region_id TEXT NOT NULL,
+  prediction_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+  target_timestamp DATETIME NOT NULL,
   predicted_aqi INTEGER,
-  confidence_score DECIMAL(3,2),
-  model_version VARCHAR(50)
+  confidence_score REAL,
+  model_version TEXT,
+  FOREIGN KEY (region_id) REFERENCES regions(id)
 );`
                     },
                     {
-                      name: 'DataSources',
-                      sql: `CREATE TABLE data_sources (
-  id UUID PRIMARY KEY,
-  name VARCHAR(255) NOT NULL,
-  type VARCHAR(100) NOT NULL,
+                      name: 'model_explanations',
+                      sql: `CREATE TABLE IF NOT EXISTS model_explanations (
+  id TEXT PRIMARY KEY,
+  prediction_id TEXT REFERENCES predictions(id),
+  feature_name TEXT,
+  feature_value REAL,
+  contribution REAL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);`
+                    },
+                    {
+                      name: 'data_sources',
+                      sql: `CREATE TABLE IF NOT EXISTS data_sources (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  type TEXT NOT NULL,
   base_url TEXT,
   notes TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );`
                     },
                     {
-                      name: 'RawIngest',
-                      sql: `CREATE TABLE raw_ingest (
-  id UUID PRIMARY KEY,
-  source_id UUID REFERENCES data_sources(id),
+                      name: 'raw_ingest',
+                      sql: `CREATE TABLE IF NOT EXISTS raw_ingest (
+  id TEXT PRIMARY KEY,
+  source_id TEXT,
   source_url TEXT NOT NULL,
-  fetched_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  raw_payload JSONB NOT NULL,
-  format VARCHAR(50) NOT NULL,
-  processed BOOLEAN DEFAULT FALSE
+  fetched_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  raw_payload TEXT NOT NULL,
+  format TEXT NOT NULL,
+  processed INTEGER DEFAULT 0,
+  FOREIGN KEY (source_id) REFERENCES data_sources(id)
 );`
                     }
                   ].map((table, i) => (
@@ -602,14 +620,14 @@ export default function App() {
               {/* Indexing & Keys */}
               <section className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100">
-                  <h3 className="text-xl font-bold text-slate-800 mb-4">4. Primary & Foreign Keys</h3>
+                  <h3 className="text-xl font-bold text-slate-800 mb-4">4. Key Constraints & Referential Integrity</h3>
                   <div className="space-y-4 text-sm text-slate-600">
-                    <p><strong>Primary Keys:</strong> All tables use <code>UUID</code> (or <code>TEXT</code> in SQLite) as primary keys to ensure global uniqueness across distributed sensors.</p>
-                    <p><strong>Foreign Keys:</strong> <code>region_id</code> is the universal foreign key, enforcing referential integrity and enabling efficient joins for regional analysis.</p>
+                    <p><strong>Primary Keys:</strong> Every table employs a <code>TEXT</code> primary key containing a UUID-formatted string, ensuring uniqueness across seed entries and future ingestion batches.</p>
+                    <p><strong>Foreign Keys:</strong> <code>region_id</code> serves as the universal referential constraint, linking metrics, sources, and predictions back to <code>regions</code>. A secondary foreign key in <code>model_explanations</code> references <code>predictions(id)</code>, establishing a one-to-many relationship for future per-prediction explanations.</p>
                   </div>
                 </div>
                 <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100">
-                  <h3 className="text-xl font-bold text-slate-800 mb-4">5. Indexing Suggestions</h3>
+                  <h3 className="text-xl font-bold text-slate-800 mb-4">5. Recommended Index Strategy</h3>
                   <div className="space-y-2">
                     {[
                       'CREATE INDEX idx_pollution_region_time ON pollution_metrics(region_id, timestamp DESC);',
@@ -638,7 +656,7 @@ export default function App() {
               <div className="max-w-3xl">
                 <h1 className="text-4xl font-black text-slate-900 mb-4 tracking-tight">Backend API Layer</h1>
                 <p className="text-lg text-slate-600 leading-relaxed">
-                  FastAPI-based RESTful service providing high-performance endpoints for data retrieval and real-time prediction execution.
+                  A stateless RESTful service built on Express.js and better-sqlite3. Two endpoints actively serve data (regions and metrics); a third is defined for future SHAP explanations but currently returns no results.
                 </p>
               </div>
 
@@ -648,89 +666,90 @@ export default function App() {
                     <div className="bg-orange-100 p-2 rounded-lg">
                       <Code className="w-5 h-5 text-orange-600" />
                     </div>
-                    <h2 className="text-xl font-bold text-slate-800">main.py (FastAPI)</h2>
+                    <h2 className="text-xl font-bold text-slate-800">server.ts (Express)</h2>
                   </div>
                   <div className="flex gap-2">
-                    <span className="px-3 py-1 bg-slate-100 rounded-full text-[10px] font-bold text-slate-500 uppercase">FastAPI</span>
-                    <span className="px-3 py-1 bg-slate-100 rounded-full text-[10px] font-bold text-slate-500 uppercase">Pydantic</span>
+                    <span className="px-3 py-1 bg-slate-100 rounded-full text-[10px] font-bold text-slate-500 uppercase">Express.js</span>
+                    <span className="px-3 py-1 bg-slate-100 rounded-full text-[10px] font-bold text-slate-500 uppercase">better-sqlite3</span>
                   </div>
                 </div>
 
                 <div className="bg-slate-900 rounded-2xl p-6 overflow-hidden">
                   <pre className="text-sm text-orange-300 font-mono overflow-x-auto leading-relaxed">
-                    {`from fastapi import FastAPI, HTTPException, Depends
-from pydantic import BaseModel
-from typing import List
-import sqlalchemy
-from sqlalchemy.orm import Session
-import joblib
+                    {`import express from "express";
+import Database from "better-sqlite3";
+import { createServer as createViteServer } from "vite";
 
-app = FastAPI(title="IndiPoll API")
-model = joblib.load("model.pkl")
+const app = express();
+const PORT = parseInt(process.env.PORT || "3000", 10);
+const db = new Database("indipoll.db");
 
-# Pydantic Schemas
-class Region(BaseModel):
-    id: str
-    name: str
+// Schema initialised via db.exec(\`CREATE TABLE IF NOT EXISTS …\`)
+// Seed data inserted idempotently with INSERT OR IGNORE
 
-class PredictionRequest(BaseModel):
-    region_id: str
-    temperature: float
-    humidity: float
-    wind_speed: float
+/** GET /api/regions — List all monitored regions. */
+app.get("/api/regions", (_req, res) => {
+  const allRegions = db.prepare("SELECT * FROM regions").all();
+  res.json(allRegions);
+});
 
-@app.get("/regions", response_model=List[Region])
-def get_regions(db: Session = Depends(get_db)):
-    return db.query(RegionModel).all()
+/** GET /api/metrics/:regionId — Pollution, climate & predictions. */
+app.get("/api/metrics/:regionId", (req, res) => {
+  const { regionId } = req.params;
+  const pollution = db.prepare(
+    "SELECT * FROM pollution_metrics WHERE region_id = ? ORDER BY timestamp DESC LIMIT 10"
+  ).all(regionId);
+  const climate = db.prepare(
+    "SELECT * FROM climate_metrics WHERE region_id = ? ORDER BY timestamp DESC LIMIT 10"
+  ).all(regionId);
+  const predictions = db.prepare(
+    "SELECT * FROM predictions WHERE region_id = ? ORDER BY target_timestamp ASC LIMIT 5"
+  ).all(regionId);
+  res.json({ pollution, climate, predictions });
+});
 
-@app.get("/pollution-data/{region_id}")
-def get_pollution(region_id: str, db: Session = Depends(get_db)):
-    data = db.query(PollutionModel).filter(region_id == region_id).all()
-    if not data:
-        raise HTTPException(status_code=404, detail="Region not found")
-    return data
-
-@app.post("/run-prediction")
-def run_prediction(req: PredictionRequest):
-    # Prepare features for model
-    features = [[req.temperature, req.humidity, req.wind_speed, 150.0, 145.0]]
-    prediction = model.predict(features)[0]
-    return {"predicted_aqi": round(prediction, 2)}`}
+/** GET /api/explain/:predictionId — SHAP feature contributions. */
+app.get("/api/explain/:predictionId", (req, res) => {
+  const contributions = db.prepare(
+    "SELECT feature_name, feature_value, contribution FROM model_explanations WHERE prediction_id = ? ORDER BY ABS(contribution) DESC"
+  ).all(req.params.predictionId);
+  res.json({ prediction_id: req.params.predictionId, contributions });
+});`}
                   </pre>
                 </div>
 
                 <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="space-y-4">
-                    <h3 className="text-lg font-bold text-slate-800">API Capabilities</h3>
+                    <h3 className="text-lg font-bold text-slate-800">Architectural Characteristics</h3>
                     <ul className="space-y-3">
                       <li className="flex items-center gap-2 text-sm text-slate-600">
                         <div className="w-1.5 h-1.5 rounded-full bg-orange-500" />
-                        Automatic Swagger/OpenAPI documentation generation.
+                        Dual-mode serving: embedded Vite middleware for hot-module replacement in development; optimised static asset delivery in production.
                       </li>
                       <li className="flex items-center gap-2 text-sm text-slate-600">
                         <div className="w-1.5 h-1.5 rounded-full bg-orange-500" />
-                        Asynchronous request handling for high concurrency.
+                        Self-initialising SQLite database with idempotent seed data (INSERT OR IGNORE), requiring zero external provisioning.
                       </li>
                       <li className="flex items-center gap-2 text-sm text-slate-600">
                         <div className="w-1.5 h-1.5 rounded-full bg-orange-500" />
-                        Built-in data validation using Pydantic models.
+                        Clean namespace separation: all data endpoints scoped under <code>/api/</code>; SPA catch-all for client-side routing.
                       </li>
                     </ul>
                   </div>
                   <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100">
-                    <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4">Endpoint Summary</h3>
+                    <h3 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-4">Endpoint Reference</h3>
                     <div className="space-y-3">
                       <div className="flex justify-between items-center">
-                        <code className="text-xs bg-white px-2 py-1 rounded border text-emerald-600">GET /regions</code>
-                        <span className="text-xs text-slate-400">List all regions</span>
+                        <code className="text-xs bg-white px-2 py-1 rounded border text-emerald-600">GET /api/regions</code>
+                        <span className="text-xs text-slate-400">Returns all 3 seeded regions</span>
                       </div>
                       <div className="flex justify-between items-center">
-                        <code className="text-xs bg-white px-2 py-1 rounded border text-emerald-600">GET /pollution-data/{"{id}"}</code>
-                        <span className="text-xs text-slate-400">Historical metrics</span>
+                        <code className="text-xs bg-white px-2 py-1 rounded border text-emerald-600">GET /api/metrics/{"{"}id{"}"}</code>
+                        <span className="text-xs text-slate-400">Pollution, climate & seeded predictions</span>
                       </div>
                       <div className="flex justify-between items-center">
-                        <code className="text-xs bg-white px-2 py-1 rounded border text-blue-600">POST /run-prediction</code>
-                        <span className="text-xs text-slate-400">Execute ML model</span>
+                        <code className="text-xs bg-white px-2 py-1 rounded border text-emerald-600">GET /api/explain/{"{"}id{"}"}</code>
+                        <span className="text-xs text-slate-400">Defined; returns 404 until model is trained</span>
                       </div>
                     </div>
                   </div>
@@ -746,9 +765,9 @@ def run_prediction(req: PredictionRequest):
               className="space-y-8"
             >
               <div className="max-w-3xl">
-                <h1 className="text-4xl font-black text-slate-900 mb-4 tracking-tight">AI Prediction Engine</h1>
+                <h1 className="text-4xl font-black text-slate-900 mb-4 tracking-tight">Prediction Training Script</h1>
                 <p className="text-lg text-slate-600 leading-relaxed">
-                  Random Forest Regressor model trained on climate variables and historical pollution data to forecast Air Quality Index (AQI).
+                  <code>ml_train.py</code> is a standalone training script designed to build a RandomForestRegressor (200 estimators) on joined pollution and climate data, with SHAP-based explainability. It targets a PostgreSQL database and has not yet been executed against the application's SQLite store. The dashboard currently displays deterministic seed predictions generated by <code>server.ts</code>.
                 </p>
               </div>
 
@@ -759,84 +778,92 @@ def run_prediction(req: PredictionRequest):
                       <div className="bg-purple-100 p-2 rounded-lg">
                         <TrendingUp className="w-5 h-5 text-purple-600" />
                       </div>
-                      <h2 className="text-xl font-bold text-slate-800">model_trainer.py</h2>
+                      <h2 className="text-xl font-bold text-slate-800">ml_train.py</h2>
                     </div>
                   </div>
 
                   <div className="bg-slate-900 rounded-2xl p-6 overflow-hidden">
                     <pre className="text-sm text-purple-300 font-mono overflow-x-auto leading-relaxed">
-                      {`import pandas as pd
-import numpy as np
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import mean_absolute_error, r2_score
-import joblib
+                      {`from sklearn.ensemble import RandomForestRegressor
+from sklearn.metrics import mean_absolute_error, mean_squared_error
+import shap, joblib, numpy as np
 
-class IndiPollPredictor:
-    def __init__(self):
-        self.model = RandomForestRegressor(n_estimators=100, random_state=42)
-        
-    def prepare_data(self, df):
-        """
-        Features: temp, humidity, wind_speed, lag_aqi_1h, lag_aqi_24h
-        Target: aqi
-        """
-        df['lag_aqi_1h'] = df['aqi'].shift(1)
-        df['lag_aqi_24h'] = df['aqi'].shift(24)
-        df = df.dropna()
-        
-        X = df[['temperature', 'humidity', 'wind_speed', 'lag_aqi_1h', 'lag_aqi_24h']]
-        y = df['aqi']
-        return train_test_split(X, y, test_size=0.2, random_state=42)
+# 12 base features joined from pollution_metrics + climate_metrics
+BASE_FEATURES = [
+    "pm25","pm10","no2","so2","co","o3",
+    "temperature","humidity","wind_speed",
+    "wind_direction","precipitation","pressure",
+]
 
-    def train(self, X_train, y_train):
-        self.model.fit(X_train, y_train)
-        
-    def evaluate(self, X_test, y_test):
-        predictions = self.model.predict(X_test)
-        mae = mean_absolute_error(y_test, predictions)
-        r2 = r2_score(y_test, predictions)
-        return {"MAE": mae, "R2": r2}
+# Feature engineering: temporal + lag + rolling
+df["hour"]        = df["timestamp"].dt.hour
+df["day_of_week"] = df["timestamp"].dt.dayofweek
+df["month"]       = df["timestamp"].dt.month
 
-    def save_model(self, path='model.pkl'):
-        joblib.dump(self.model, path)`}
+for lag in [1, 3, 6]:             # lag features
+    df[f"{col}_lag_{lag}"] = df.groupby("region_id")[col].shift(lag)
+for window in [3, 6]:             # rolling mean
+    df[f"{col}_roll_{window}"] = (
+        df.groupby("region_id")[col]
+          .rolling(window, min_periods=1).mean()
+    )
+
+# Train / evaluate
+model = RandomForestRegressor(n_estimators=200, random_state=42, n_jobs=-1)
+model.fit(X_train, y_train)
+preds = model.predict(X_test)
+rmse = float(np.sqrt(mean_squared_error(y_test, preds)))
+mae  = float(mean_absolute_error(y_test, preds))
+
+# SHAP explainability → stored per-prediction in model_explanations
+explainer   = shap.TreeExplainer(model)
+shap_values = explainer.shap_values(X_test)
+joblib.dump(model, "model.pkl")`}
                     </pre>
                   </div>
                 </div>
 
                 <div className="space-y-6">
                   <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100">
-                    <h3 className="text-lg font-bold text-slate-800 mb-4">Model Architecture</h3>
+                    <h3 className="text-lg font-bold text-slate-800 mb-4">Script Design (Not Yet Executed)</h3>
                     <div className="space-y-4">
                       <div className="flex items-start gap-3">
                         <div className="w-1.5 h-1.5 rounded-full bg-purple-500 mt-2 shrink-0" />
-                        <p className="text-sm text-slate-600"><strong>Random Forest:</strong> Handles non-linear relationships between climate and pollution.</p>
+                        <p className="text-sm text-slate-600"><strong>Ensemble Regressor (200 estimators):</strong> Configured to model non-linear dependencies between 12 pollutant and climate covariates and the target AQI.</p>
                       </div>
                       <div className="flex items-start gap-3">
                         <div className="w-1.5 h-1.5 rounded-full bg-purple-500 mt-2 shrink-0" />
-                        <p className="text-sm text-slate-600"><strong>Lag Features:</strong> Incorporates temporal dependencies (1h and 24h shifts).</p>
+                        <p className="text-sm text-slate-600"><strong>Feature Engineering:</strong> Script generates lag features (k ∈ &#123;1, 3, 6&#125;) and rolling means (w ∈ &#123;3, 6&#125;) per region, plus temporal features (hour, day_of_week, month).</p>
                       </div>
                       <div className="flex items-start gap-3">
                         <div className="w-1.5 h-1.5 rounded-full bg-purple-500 mt-2 shrink-0" />
-                        <p className="text-sm text-slate-600"><strong>Evaluation:</strong> Optimized for Mean Absolute Error (MAE) to minimize prediction deviation.</p>
+                        <p className="text-sm text-slate-600"><strong>SHAP Integration:</strong> Designed to compute TreeExplainer values and persist them in <code>model_explanations</code>. Requires execution against a PostgreSQL database with sufficient training data.</p>
+                      </div>
+                      <div className="flex items-start gap-3">
+                        <div className="w-1.5 h-1.5 rounded-full bg-purple-500 mt-2 shrink-0" />
+                        <p className="text-sm text-slate-600"><strong>Current Status:</strong> Not yet run. Requires <code>psycopg</code>, <code>scikit-learn</code>, <code>shap</code>, and <code>joblib</code> Python packages, plus a PostgreSQL connection string.</p>
                       </div>
                     </div>
                   </div>
 
                   <div className="bg-purple-600 rounded-3xl p-8 text-white shadow-lg shadow-purple-200">
-                    <h3 className="text-lg font-bold mb-2">Performance Metrics</h3>
+                    <h3 className="text-lg font-bold mb-2">Planned Evaluation</h3>
                     <div className="space-y-4 mt-6">
                       <div className="flex justify-between items-end">
-                        <span className="text-purple-100 text-sm">R² Score</span>
-                        <span className="text-2xl font-black">0.89</span>
+                        <span className="text-purple-100 text-sm">RMSE</span>
+                        <span className="text-lg font-bold text-purple-100">Root Mean Squared Error</span>
                       </div>
                       <div className="w-full bg-purple-400/30 h-2 rounded-full overflow-hidden">
-                        <div className="bg-white h-full w-[89%]" />
+                        <div className="bg-white/20 h-full w-full" />
                       </div>
                       <div className="flex justify-between items-end">
-                        <span className="text-purple-100 text-sm">Avg. MAE</span>
-                        <span className="text-2xl font-black">12.4</span>
+                        <span className="text-purple-100 text-sm">MAE</span>
+                        <span className="text-lg font-bold text-purple-100">Mean Absolute Error</span>
                       </div>
+                      <div className="w-full bg-purple-400/30 h-2 rounded-full overflow-hidden">
+                        <div className="bg-white/20 h-full w-full" />
+                      </div>
+                      <p className="text-xs text-purple-200 mt-2">Metrics will be computed on an 80/20 train-test split (random_state=42) once the script is executed. No model has been trained yet.</p>
                     </div>
                   </div>
                 </div>
@@ -851,9 +878,9 @@ class IndiPollPredictor:
               className="space-y-8"
             >
               <div className="max-w-3xl">
-                <h1 className="text-4xl font-black text-slate-900 mb-4 tracking-tight">Data Ingestion Layer</h1>
+                <h1 className="text-4xl font-black text-slate-900 mb-4 tracking-tight">Data Ingestion Scripts</h1>
                 <p className="text-lg text-slate-600 leading-relaxed">
-                  Python-based ingestion script for processing pollution and climate datasets with built-in validation and batch optimization.
+                  Two standalone Python scripts designed for external data integration: <strong>openaq_ingest.py</strong> fetches measurements from the OpenAQ v3 REST API into <code>raw_ingest</code>, and <strong>transform_ingest.py</strong> normalises raw payloads into <code>pollution_metrics</code> and <code>climate_metrics</code>. Both scripts target a PostgreSQL database and are not part of the current application runtime. Data displayed in the dashboard is produced by in-process seed logic in <code>server.ts</code>.
                 </p>
               </div>
 
@@ -863,89 +890,74 @@ class IndiPollPredictor:
                     <div className="bg-blue-100 p-2 rounded-lg">
                       <Code className="w-5 h-5 text-blue-600" />
                     </div>
-                    <h2 className="text-xl font-bold text-slate-800">ingestor.py</h2>
+                    <h2 className="text-xl font-bold text-slate-800">openaq_ingest.py → transform_ingest.py</h2>
                   </div>
                   <div className="flex gap-2">
                     <span className="px-3 py-1 bg-slate-100 rounded-full text-[10px] font-bold text-slate-500 uppercase">Python 3.9+</span>
-                    <span className="px-3 py-1 bg-slate-100 rounded-full text-[10px] font-bold text-slate-500 uppercase">SQLAlchemy</span>
+                    <span className="px-3 py-1 bg-slate-100 rounded-full text-[10px] font-bold text-slate-500 uppercase">psycopg</span>
+                    <span className="px-3 py-1 bg-slate-100 rounded-full text-[10px] font-bold text-slate-500 uppercase">OpenAQ v3</span>
                   </div>
                 </div>
 
                 <div className="bg-slate-900 rounded-2xl p-6 overflow-hidden">
                   <pre className="text-sm text-blue-300 font-mono overflow-x-auto leading-relaxed">
-                    {`import pandas as pd
-import logging
-from sqlalchemy import create_engine, text
-from sqlalchemy.exc import SQLAlchemyError
-from datetime import datetime
-import uuid
+                    {`# ── Stage 1: openaq_ingest.py ─────────────────────────
+# Fetches latest measurements from the OpenAQ REST API
+# for Indian monitoring stations and stores raw JSON
+# payloads in the raw_ingest table.
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
+API_BASE = "https://api.openaq.org"
 
-class IndiPollIngestor:
-    def __init__(self, db_url):
-        self.engine = create_engine(db_url)
-        
-    def validate_pollution_data(self, df):
-        """Basic validation for pollution metrics."""
-        required_cols = ['region_id', 'pm25', 'pm10', 'aqi']
-        for col in required_cols:
-            if col not in df.columns:
-                raise ValueError(f"Missing required column: {col}")
-        
-        # Ensure numeric values are positive
-        numeric_cols = ['pm25', 'pm10', 'aqi']
-        for col in numeric_cols:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
-            df[col] = df[col].clip(lower=0)
-        
-        return df.dropna(subset=['region_id', 'aqi'])
+def _iter_india_locations(api_key, limit, max_pages, ...):
+    """Paginate /v3/locations?iso=IN and yield location dicts."""
+    page = 1
+    while page <= max_pages:
+        url = f"{API_BASE}/v3/locations?iso=IN&limit={limit}&page={page}"
+        data = _request_with_retries(url, api_key, ...)
+        yield from data.get("results") or []
+        page += 1
 
-    def ingest_pollution_csv(self, file_path):
-        """Ingests pollution data from a CSV file using batch inserts."""
-        try:
-            df = pd.read_csv(file_path)
-            df = self.validate_pollution_data(df)
-            
-            # Efficient Batch Insert
-            df.to_sql(
-                'pollution_metrics', 
-                con=self.engine, 
-                if_exists='append', 
-                index=False,
-                method='multi',
-                chunksize=1000
-            )
-            logger.info(f"Successfully ingested {len(df)} records.")
-        except Exception as e:
-            logger.error(f"Failed to ingest CSV: {str(e)}")
+def _insert_raw_ingest(conn, json_adapter, source_id, url, payload, fmt):
+    """INSERT INTO raw_ingest (id, source_id, source_url, raw_payload, format)"""
+    ...
 
-    def ingest_via_api(self, api_data):
-        """Ingests data with duplicate prevention (ON CONFLICT)."""
-        query = text("""
-            INSERT INTO pollution_metrics (id, region_id, timestamp, pm25, pm10, aqi)
-            VALUES (:id, :region_id, :timestamp, :pm25, :pm10, :aqi)
-            ON CONFLICT (region_id, timestamp) DO NOTHING;
-        """)
-        with self.engine.begin() as conn:
-            conn.execute(query, api_data)`}
+# ── Stage 2: transform_ingest.py ─────────────────────
+# Reads unprocessed rows from raw_ingest, extracts
+# pollution (pm25, pm10, no2, so2, co, o3, aqi) and
+# climate (temperature, humidity, wind_speed, …) values,
+# then inserts normalised rows into pollution_metrics
+# and climate_metrics. Marks raw rows as processed.
+
+POLLUTION_PARAMS = {"pm25","pm10","no2","so2","co","o3"}
+CLIMATE_PARAMS   = {"temperature","humidity","wind_speed",
+                    "wind_direction","precipitation","pressure"}
+
+def _extract_measurements(payload):
+    """Parse OpenAQ JSON → (pollution_values, climate_values, ts)"""
+    ...
+
+def _insert_pollution(conn, region_id, ts, values):
+    """INSERT OR IGNORE INTO pollution_metrics …"""
+    ...
+
+def _mark_processed(conn, raw_id):
+    """UPDATE raw_ingest SET processed = TRUE WHERE id = …"""
+    ...`}
                   </pre>
                 </div>
 
                 <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
-                    <h4 className="font-bold text-slate-800 text-sm mb-2">Validation</h4>
-                    <p className="text-xs text-slate-500">Uses Pandas for type coercion and range checking before database commit.</p>
+                    <h4 className="font-bold text-slate-800 text-sm mb-2">Fault Tolerance</h4>
+                    <p className="text-xs text-slate-500"><code>openaq_ingest.py</code> implements exponential backoff with randomised jitter for resilient API calls against rate limits and transient network failures.</p>
                   </div>
                   <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
-                    <h4 className="font-bold text-slate-800 text-sm mb-2">Efficiency</h4>
-                    <p className="text-xs text-slate-500">Implements <code>method='multi'</code> and <code>chunksize</code> for optimized PostgreSQL inserts.</p>
+                    <h4 className="font-bold text-slate-800 text-sm mb-2">Parameter Normalisation</h4>
+                    <p className="text-xs text-slate-500"><code>transform_ingest.py</code> canonicalises heterogeneous parameter names (<code>temp→temperature</code>, <code>ws→wind_speed</code>) via lookup dict, then partitions values into pollutant and climate sets.</p>
                   </div>
                   <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
-                    <h4 className="font-bold text-slate-800 text-sm mb-2">Reliability</h4>
-                    <p className="text-xs text-slate-500">Uses <code>ON CONFLICT DO NOTHING</code> to prevent duplicate time-series entries.</p>
+                    <h4 className="font-bold text-slate-800 text-sm mb-2">Row-Level Processing</h4>
+                    <p className="text-xs text-slate-500">Each <code>raw_ingest</code> row is read with <code>FOR UPDATE SKIP LOCKED</code> and marked <code>processed = TRUE</code> after transformation, enabling concurrent batch execution without duplicates.</p>
                   </div>
                 </div>
               </div>
