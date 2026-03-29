@@ -1,0 +1,776 @@
+:root {
+  --bg: #081412;
+  --bg-soft: rgba(9, 27, 23, 0.82);
+  --panel: rgba(12, 32, 28, 0.9);
+  --panel-strong: rgba(14, 38, 33, 0.98);
+  --line: rgba(211, 235, 224, 0.12);
+  --text: #edf6f1;
+  --muted: #9bb5aa;
+  --shadow: 0 28px 60px rgba(0, 0, 0, 0.35);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  color-scheme: dark;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-family: "Space Grotesk", "Avenir Next", "Segoe UI", sans-serif;
+  color: var(--text);
+  background:
+    radial-gradient(circle at top left, rgba(86, 178, 140, 0.18), transparent 28%),
+    radial-gradient(circle at 85% 15%, rgba(246, 199, 92, 0.16), transparent 22%),
+    linear-gradient(160deg, #07100e 0%, #0d1f1b 44%, #081412 100%);
+  overflow-x: hidden;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: radial-gradient(circle at center, black, transparent 78%);
+  pointer-events: none;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button,
+a {
+  touch-action: manipulation;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+.app-shell {
+  max-width: 1440px;
+  margin: 0 auto;
+  padding: calc(24px + env(safe-area-inset-top)) 20px calc(60px + env(safe-area-inset-bottom));
+}
+
+.skip-link {
+  position: absolute;
+  left: 20px;
+  top: -48px;
+  z-index: 60;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: #f4c25b;
+  color: #092018;
+  font-weight: 700;
+}
+
+.skip-link:focus-visible {
+  top: 14px;
+}
+
+.topbar,
+.panel,
+.hero-copy,
+.hero-summary {
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(18px);
+  box-shadow: var(--shadow);
+}
+
+.topbar {
+  position: sticky;
+  top: 16px;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 16px 18px;
+  border-radius: 24px;
+  margin-bottom: 24px;
+}
+
+.brand-block {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.brand-mark {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #8bf0c4, #f4c25b);
+  color: #092018;
+  font-weight: 700;
+}
+
+.brand-title {
+  margin: 0;
+  font-family: "Instrument Serif", Georgia, serif;
+  font-size: 1.8rem;
+  font-weight: 400;
+  text-wrap: balance;
+}
+
+.eyebrow,
+.panel-kicker {
+  margin: 0 0 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.72rem;
+  color: #93e3be;
+}
+
+.nav-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.nav-link,
+.primary-action,
+.secondary-action,
+.profile-pill,
+.station-button,
+.report-form input,
+.report-form select,
+.report-form textarea {
+  transition:
+    transform 180ms ease,
+    background 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.nav-link {
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  color: var(--muted);
+}
+
+.nav-link.active {
+  background: linear-gradient(135deg, rgba(139, 240, 196, 0.16), rgba(244, 194, 91, 0.14));
+  color: var(--text);
+}
+
+.status-pill {
+  padding: 10px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  min-width: 172px;
+}
+
+.model-note {
+  margin: 0 0 18px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.04);
+  width: fit-content;
+}
+
+.model-note em {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-style: normal;
+  font-size: 0.82rem;
+}
+
+.status-pill span,
+.model-note span,
+.summary-card span,
+.weather-stat span,
+.feed-item-meta,
+.subpanel-heading p,
+.form-note,
+.detail-meta span,
+.loading-panel p {
+  display: block;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.main-shell,
+.page-grid {
+  display: grid;
+  gap: 24px;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.8fr);
+  gap: 24px;
+}
+
+.hero-copy {
+  border-radius: 34px;
+  padding: 38px;
+}
+
+.hero-title {
+  max-width: 12ch;
+  margin: 0;
+  font-family: "Instrument Serif", Georgia, serif;
+  font-size: clamp(2.8rem, 4vw, 5rem);
+  font-weight: 400;
+  line-height: 0.96;
+  text-wrap: balance;
+}
+
+.hero-text {
+  max-width: 62ch;
+  margin: 18px 0 24px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.hero-actions,
+.panel-heading,
+.detail-meta,
+.forecast-layout,
+.citizen-layout,
+.form-actions {
+  display: flex;
+  gap: 14px;
+}
+
+.hero-summary {
+  border-radius: 28px;
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+}
+
+.summary-card,
+.weather-stat,
+.insight-item,
+.feed-item {
+  padding: 18px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.summary-card strong,
+.snapshot-row strong,
+.metric-label strong,
+.aqi-badge,
+.status-pill strong,
+.feed-badge {
+  font-variant-numeric: tabular-nums;
+}
+
+.summary-card strong {
+  display: block;
+  margin: 10px 0 6px;
+  font-size: 2rem;
+}
+
+.panel {
+  border-radius: 28px;
+  padding: 24px;
+}
+
+.loading-panel {
+  padding: 42px 24px;
+}
+
+.panel-heading {
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px 14px;
+  max-width: 420px;
+}
+
+.legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.legend i,
+.severity-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+}
+
+.map-stage {
+  position: relative;
+  min-height: 620px;
+  border-radius: 26px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 10%, rgba(127, 224, 184, 0.12), transparent 30%),
+    linear-gradient(180deg, rgba(10, 36, 31, 0.98), rgba(5, 19, 16, 0.95));
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.map-stage--leaflet {
+  padding: 0;
+}
+
+.india-map {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 620px;
+}
+
+.india-map--leaflet {
+  min-height: 620px;
+}
+
+.india-map--leaflet .leaflet-control-zoom a {
+  background: rgba(8, 20, 18, 0.92);
+  color: var(--text);
+  border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+.india-map--leaflet .leaflet-control-attribution {
+  background: rgba(8, 20, 18, 0.75);
+  color: var(--muted);
+}
+
+.india-map--leaflet .leaflet-popup-content-wrapper,
+.india-map--leaflet .leaflet-popup-tip {
+  background: rgba(9, 27, 23, 0.96);
+  color: var(--text);
+}
+
+.map-popup {
+  display: grid;
+  gap: 6px;
+  min-width: 160px;
+}
+
+.map-popup span {
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.india-shape {
+  position: absolute;
+  inset: 20px 0 0;
+  width: 100%;
+  height: calc(100% - 20px);
+}
+
+.map-grid {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 56px 56px;
+  mask-image: radial-gradient(circle at center, black, transparent 78%);
+}
+
+.station-marker,
+.report-marker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+}
+
+.station-button {
+  display: grid;
+  gap: 4px;
+  min-width: 112px;
+  padding: 12px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 18px;
+  background: rgba(4, 12, 10, 0.72);
+  color: var(--text);
+  box-shadow: 0 18px 26px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  text-align: left;
+}
+
+.station-button.active,
+.station-button:hover,
+.primary-action:hover,
+.secondary-action:hover,
+.profile-pill:hover,
+.nav-link:hover {
+  transform: translateY(-1px);
+}
+
+.nav-link:hover,
+.nav-link:focus-visible,
+.secondary-action:hover,
+.secondary-action:focus-visible,
+.profile-pill:hover,
+.profile-pill:focus-visible,
+.station-button:hover,
+.station-button:focus-visible {
+  border-color: rgba(139, 240, 196, 0.36);
+  color: var(--text);
+}
+
+.station-city {
+  font-weight: 700;
+  min-width: 0;
+}
+
+.station-aqi {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #dbe8e2;
+  font-size: 0.86rem;
+}
+
+.severity-dot {
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.08);
+}
+
+.report-marker {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  background: rgba(244, 194, 91, 0.22);
+  border: 2px solid #f4c25b;
+  box-shadow: 0 0 0 0 rgba(244, 194, 91, 0.5);
+  animation: ping 2.5s infinite;
+}
+
+@keyframes ping {
+  0% {
+    box-shadow: 0 0 0 0 rgba(244, 194, 91, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 18px rgba(244, 194, 91, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(244, 194, 91, 0);
+  }
+}
+
+.quick-grid,
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.detail-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.subpanel {
+  padding: 18px;
+  border-radius: 20px;
+  background: var(--panel-strong);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.subpanel-heading {
+  margin-bottom: 14px;
+}
+
+.snapshot-list,
+.capability-list,
+.metric-stack,
+.insight-list,
+.report-feed-list {
+  display: grid;
+  gap: 12px;
+}
+
+.snapshot-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.metric-row {
+  display: grid;
+  gap: 7px;
+}
+
+.metric-label {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.metric-track {
+  height: 12px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.metric-fill {
+  height: 100%;
+}
+
+.detail-meta {
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.detail-meta > div {
+  flex: 1 1 150px;
+  padding: 16px 18px;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.aqi-badge,
+.primary-action,
+.secondary-action,
+.profile-pill,
+.advisory-level,
+.feed-badge {
+  border-radius: 999px;
+}
+
+.aqi-badge {
+  padding: 12px 16px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.weather-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.forecast-layout > * {
+  flex: 1;
+}
+
+.forecast-chart {
+  width: 100%;
+  min-height: 320px;
+}
+
+.primary-action,
+.secondary-action,
+.profile-pill {
+  appearance: none;
+  cursor: pointer;
+}
+
+.primary-action {
+  padding: 14px 20px;
+  border: 1px solid transparent;
+  background: linear-gradient(135deg, #8bf0c4, #f4c25b);
+  color: #092018;
+  font-weight: 700;
+}
+
+.secondary-action,
+.profile-pill {
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.profile-pill.active {
+  background: linear-gradient(135deg, rgba(139, 240, 196, 0.18), rgba(244, 194, 91, 0.15));
+  border-color: rgba(139, 240, 196, 0.36);
+}
+
+.nav-link:focus-visible,
+.primary-action:focus-visible,
+.secondary-action:focus-visible,
+.profile-pill:focus-visible,
+.station-button:focus-visible,
+.report-form input:focus-visible,
+.report-form select:focus-visible,
+.report-form textarea:focus-visible {
+  outline: 2px solid transparent;
+  box-shadow: 0 0 0 3px rgba(139, 240, 196, 0.2);
+}
+
+.advisory-card {
+  padding: 28px;
+  border-radius: 24px;
+  background:
+    radial-gradient(circle at top right, rgba(244, 194, 91, 0.16), transparent 26%),
+    rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.advisory-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.advisory-level {
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.advisory-card p {
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.advisory-list {
+  margin: 18px 0 0;
+  padding-left: 20px;
+}
+
+.report-form {
+  flex: 0.95;
+  display: grid;
+  gap: 14px;
+}
+
+.report-feed {
+  flex: 1.05;
+}
+
+.report-form label {
+  display: grid;
+  gap: 7px;
+}
+
+.report-form input,
+.report-form select,
+.report-form textarea {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  padding: 14px 16px;
+}
+
+.report-form textarea {
+  resize: vertical;
+}
+
+.report-form button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.feed-badge {
+  display: inline-flex;
+  padding: 4px 8px;
+  background: rgba(244, 194, 91, 0.12);
+  color: #f4c25b;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.report-feed-list {
+  content-visibility: auto;
+}
+
+h1,
+h2,
+h3 {
+  scroll-margin-top: 110px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@media (max-width: 1120px) {
+  .topbar,
+  .hero,
+  .quick-grid,
+  .detail-grid,
+  .forecast-layout,
+  .citizen-layout,
+  .panel-heading,
+  .hero-actions,
+  .form-actions {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+  }
+
+  .nav-links,
+  .legend {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 720px) {
+  .app-shell {
+    padding: 14px 12px 40px;
+  }
+
+  .topbar,
+  .panel,
+  .hero-copy {
+    padding: 16px;
+  }
+
+  .map-stage,
+  .india-map {
+    min-height: 520px;
+  }
+
+  .hero-title {
+    max-width: 100%;
+    font-size: 2.7rem;
+  }
+
+  .weather-grid,
+  .quick-grid,
+  .detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .station-button {
+    min-width: 88px;
+    padding: 10px 11px;
+  }
+}
