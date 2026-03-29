@@ -1,5 +1,6 @@
-import modelArtifact from "../data/ml-model-artifact.generated.js";
 import { FEATURE_NAMES, buildContextSequence, historyRowsToSequence, stationToFeatureVector } from "./ml-sequence.js";
+import { resolveModelArtifact } from "./model-artifact.js";
+import { findStationEvaluation } from "./model-evaluation.js";
 
 function sigmoid(value) {
   return 1 / (1 + Math.exp(-value));
@@ -9,12 +10,12 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
-function normalizeFeatureStep(step) {
-  return step.map((value, index) => (value - modelArtifact.featureStats.mean[index]) / modelArtifact.featureStats.std[index]);
+function normalizeFeatureStep(step, artifact) {
+  return step.map((value, index) => (value - artifact.featureStats.mean[index]) / artifact.featureStats.std[index]);
 }
 
-function denormalizeTarget(value) {
-  return value * modelArtifact.targetStats.std + modelArtifact.targetStats.mean;
+function denormalizeTarget(value, artifact) {
+  return value * artifact.targetStats.std + artifact.targetStats.mean;
 }
 
 function matVecMul(matrix, vector) {
@@ -27,15 +28,15 @@ function addVectors(left, right) {
   return left.map((value, index) => value + right[index]);
 }
 
-function runLstm(sequence) {
-  const units = modelArtifact.weights.recurrentKernel.length;
+function runLstm(sequence, artifact) {
+  const units = artifact.weights.recurrentKernel.length;
   let hidden = Array(units).fill(0);
   let cell = Array(units).fill(0);
 
   sequence.forEach((step) => {
-    const inputPart = matVecMul(modelArtifact.weights.kernel, step);
-    const recurrentPart = matVecMul(modelArtifact.weights.recurrentKernel, hidden);
-    const gates = addVectors(addVectors(inputPart, recurrentPart), modelArtifact.weights.bias);
+    const inputPart = matVecMul(artifact.weights.kernel, step);
+    const recurrentPart = matVecMul(artifact.weights.recurrentKernel, hidden);
+    const gates = addVectors(addVectors(inputPart, recurrentPart), artifact.weights.bias);
 
     const inputGate = gates.slice(0, units).map(sigmoid);
     const forgetGate = gates.slice(units, units * 2).map(sigmoid);
@@ -46,24 +47,24 @@ function runLstm(sequence) {
     hidden = hidden.map((_, index) => outputGate[index] * Math.tanh(cell[index]));
   });
 
-  const denseOutput = addVectors(matVecMul(modelArtifact.weights.denseKernel, hidden), modelArtifact.weights.denseBias);
-  return denseOutput.map(denormalizeTarget);
+  const denseOutput = addVectors(matVecMul(artifact.weights.denseKernel, hidden), artifact.weights.denseBias);
+  return denseOutput.map((value) => denormalizeTarget(value, artifact));
 }
 
-function buildConfidenceBand(values) {
-  const spread = modelArtifact.residualStd || 18;
+function buildConfidenceBand(values, artifact) {
+  const spread = artifact.residualStd || 18;
   return {
     upper: values.map((value, index) => Math.round(value + spread * (1 + index * 0.06))),
     lower: values.map((value, index) => Math.max(20, Math.round(value - spread * (1 + index * 0.06)))),
   };
 }
 
-function buildModelSequence(station, options = {}) {
+function buildModelSequence(station, artifact, options = {}) {
   const fallbackContext = buildContextSequence(station);
   const historicalContext = options.historyRows?.length ? historyRowsToSequence(options.historyRows, station) : null;
-  const seedContext = historicalContext || modelArtifact.seedContext?.[station.id] || fallbackContext;
+  const seedContext = historicalContext || artifact.seedContext?.[station.id] || fallbackContext;
   const featureVector = stationToFeatureVector(station);
-  const nextContext = seedContext.slice(-modelArtifact.lookback).map((step, index, array) => {
+  const nextContext = seedContext.slice(-artifact.lookback).map((step, index, array) => {
     if (index !== array.length - 1) {
       return step;
     }
@@ -71,23 +72,23 @@ function buildModelSequence(station, options = {}) {
     return FEATURE_NAMES.map((featureName) => featureVector[featureName]);
   });
 
-  return nextContext.map(normalizeFeatureStep);
+  return nextContext.map((step) => normalizeFeatureStep(step, artifact));
 }
 
-function forecastMeanForFeatures(sequence, maskedLastStep) {
+function forecastMeanForFeatures(sequence, maskedLastStep, artifact) {
   const maskedSequence = sequence.map((step, index, array) =>
     index === array.length - 1 ? maskedLastStep : step,
   );
-  return runLstm(maskedSequence).reduce((sum, value) => sum + value, 0) / modelArtifact.horizon;
+  return runLstm(maskedSequence, artifact).reduce((sum, value) => sum + value, 0) / artifact.horizon;
 }
 
 function factorial(value) {
   return value <= 1 ? 1 : value * factorial(value - 1);
 }
 
-function explainForecast(sequence, station) {
+function explainForecast(sequence, station, artifact) {
   const actual = sequence[sequence.length - 1];
-  const baseline = modelArtifact.baselineLastStep;
+  const baseline = artifact.baselineLastStep;
   const featureCount = FEATURE_NAMES.length;
   const shapValues = Array(featureCount).fill(0);
   const subsetWeights = Array.from({ length: featureCount + 1 }, (_, size) =>
@@ -98,7 +99,7 @@ function explainForecast(sequence, station) {
 
   for (let mask = 0; mask < 2 ** featureCount; mask += 1) {
     const maskedLastStep = actual.map((value, index) => ((mask >> index) & 1 ? value : baseline[index]));
-    coalitionValue.set(mask, forecastMeanForFeatures(sequence, maskedLastStep));
+    coalitionValue.set(mask, forecastMeanForFeatures(sequence, maskedLastStep, artifact));
   }
 
   for (let featureIndex = 0; featureIndex < featureCount; featureIndex += 1) {
@@ -141,11 +142,13 @@ function explainForecast(sequence, station) {
 }
 
 export function generateForecastPayload(station, options = {}) {
-  const sequence = buildModelSequence(station, options);
-  const rawForecast = runLstm(sequence).map((value) => Math.round(clamp(value, 20, 520)));
-  const confidenceBand = buildConfidenceBand(rawForecast);
-  const shap = explainForecast(sequence, station);
-  const evaluationSummary = modelArtifact.evaluationSummary || null;
+  const artifact = resolveModelArtifact(options.artifact);
+  const sequence = buildModelSequence(station, artifact, options);
+  const rawForecast = runLstm(sequence, artifact).map((value) => Math.round(clamp(value, 20, 520)));
+  const confidenceBand = buildConfidenceBand(rawForecast, artifact);
+  const shap = explainForecast(sequence, station, artifact);
+  const evaluationSummary = artifact.evaluationSummary?.samples ? artifact.evaluationSummary : null;
+  const stationEvaluation = findStationEvaluation(evaluationSummary, station);
 
   return {
     forecast: {
@@ -155,13 +158,16 @@ export function generateForecastPayload(station, options = {}) {
     },
     shap,
     model: {
-      version: modelArtifact.version,
-      trainedAt: modelArtifact.trainedAt,
+      version: artifact.version,
+      trainedAt: artifact.trainedAt,
       generatedAt: new Date().toISOString(),
-      confidence: "shap-exact-last-step",
-      dataSource: modelArtifact.dataSource,
-      sampleCount: modelArtifact.sampleCount,
-      metrics: modelArtifact.metrics,
+      confidence: "exact-shapley-latest-feature-context",
+      dataSource: artifact.dataSource,
+      sampleCount: artifact.sampleCount,
+      stationCount: artifact.stationCount,
+      promotion: artifact.promotion || null,
+      trainingWindow: artifact.trainingWindow || null,
+      metrics: artifact.metrics,
       evaluation: evaluationSummary
         ? {
             samples: evaluationSummary.samples,
@@ -170,7 +176,11 @@ export function generateForecastPayload(station, options = {}) {
             persistenceRmse: evaluationSummary.persistenceRmse,
             persistenceMae: evaluationSummary.persistenceMae,
             persistenceDelta: evaluationSummary.persistenceDelta,
+            rollingMeanRmse: evaluationSummary.rollingMeanRmse,
+            rollingMeanMae: evaluationSummary.rollingMeanMae,
+            rollingMeanDelta: evaluationSummary.rollingMeanDelta,
             horizon: evaluationSummary.horizon,
+            station: stationEvaluation,
           }
         : null,
       historySamples: options.historyRows?.length || 0,

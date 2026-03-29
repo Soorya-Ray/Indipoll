@@ -1,6 +1,6 @@
 # Indipoll
 
-Indipoll is a national air quality intelligence platform for India. It combines live AQI feeds, weather context, pollutant/source attribution, personalized health advisories, citizen pollution reports, and an LSTM-based AQI forecasting pipeline with SHAP-style explanations.
+Indipoll is a national air quality intelligence platform for India. It combines live AQI feeds, weather context, pollutant/source attribution, personalized health advisories, citizen pollution reports, and an LSTM-based AQI forecasting pipeline with exact Shapley attribution over the latest feature context.
 
 Production: [https://indipoll.vercel.app](https://indipoll.vercel.app)
 
@@ -36,6 +36,7 @@ Production: [https://indipoll.vercel.app](https://indipoll.vercel.app)
 - The route upserts canonical station rows into `public.stations`.
 - The same refresh writes an append-only hourly observation into `public.station_observations`.
 - After observation writes, the route rebuilds `public.station_snapshots` with fresh forecast and SHAP outputs.
+- Upstream AQI and weather fetching stays server-side only.
 
 ### 2. Dashboard reads
 
@@ -46,7 +47,8 @@ Production: [https://indipoll.vercel.app](https://indipoll.vercel.app)
 
 - [`/Users/drspray/Desktop/indipoll/api/forecast.js`](./api/forecast.js) resolves the requested station from Supabase when possible.
 - It loads the latest observation history for that station and passes it into [`/Users/drspray/Desktop/indipoll/src/lib/model-service.js`](./src/lib/model-service.js).
-- The model service runs inference from the serialized artifact in [`/Users/drspray/Desktop/indipoll/src/data/ml-model-artifact.generated.js`](./src/data/ml-model-artifact.generated.js).
+- The forecast API prefers the active promoted model artifact from Supabase.
+- The model service falls back to the local serialized artifact in [`/Users/drspray/Desktop/indipoll/src/data/ml-model-artifact.generated.js`](./src/data/ml-model-artifact.generated.js) if no active model is available.
 
 ## ML pipeline
 
@@ -59,6 +61,18 @@ The trainer now prefers real historical observations from `public.station_observ
   real observations + seeded synthetic augmentation.
 
 This makes the project usable immediately while naturally improving as the cron job accumulates more hourly observations.
+
+### Promotion and backtesting
+
+- Retraining is batch-only and never runs continuously inside the serving process.
+- Each candidate model is backtested against:
+  - persistence baseline
+  - rolling-mean baseline
+- Promotion is conservative:
+  - a candidate must have enough real evaluation windows
+  - a candidate must beat persistence on RMSE
+  - otherwise the current active artifact remains active
+- Evaluation outputs are stored in `public.model_artifacts` and `public.model_evaluations`.
 
 ### Training script
 
@@ -79,8 +93,10 @@ The script:
 - loads Supabase history from `station_observations`
 - builds multivariate sequences with a 24-step lookback and 12-step horizon
 - fits an LSTM using TensorFlow.js
+- backtests the candidate on real observation windows when enough history exists
 - writes the local inference artifact to [`/Users/drspray/Desktop/indipoll/src/data/ml-model-artifact.generated.js`](./src/data/ml-model-artifact.generated.js)
 - stores model lineage in `public.model_artifacts`
+- promotes the candidate only if it beats the persistence baseline with enough real windows
 
 Key files:
 
@@ -96,6 +112,7 @@ Core tables:
 - `public.station_snapshots`: latest station state, forecast, SHAP output, model metadata
 - `public.station_observations`: append-only hourly historical feature rows used for training and context
 - `public.model_artifacts`: trained model registry and lineage metadata
+- `public.model_evaluations`: stored horizon-level and station-level backtest outputs
 - `public.community_reports`: citizen-submitted pollution events
 
 Important view:
@@ -106,6 +123,7 @@ Relevant migrations:
 
 - [`/Users/drspray/Desktop/indipoll/supabase/migrations/20260327_indipoll_backend_upgrade.sql`](./supabase/migrations/20260327_indipoll_backend_upgrade.sql)
 - [`/Users/drspray/Desktop/indipoll/supabase/migrations/20260327_indipoll_historical_training.sql`](./supabase/migrations/20260327_indipoll_historical_training.sql)
+- [`/Users/drspray/Desktop/indipoll/supabase/migrations/20260330_indipoll_model_registry_upgrade.sql`](./supabase/migrations/20260330_indipoll_model_registry_upgrade.sql)
 
 ## Environment variables
 
@@ -126,7 +144,6 @@ Optional:
 FORECAST_API_URL=
 VITE_FORECAST_API_URL=
 VITE_LIVE_BUNDLE_URL=
-VITE_WAQI_TOKEN=
 ```
 
 ## Local development
@@ -154,8 +171,9 @@ npm run build
 The app is configured for Vercel.
 
 - Frontend and serverless routes deploy together.
-- A protected refresh route is used by cron to persist fresh station observations.
-- Vercel cron can call `/api/refresh-stations` using the shared bearer secret.
+- A protected refresh route is used by cron to persist fresh station observations every hour.
+- A protected retrain route is used by cron to evaluate and potentially promote a new model every 6 hours.
+- Vercel cron calls both `/api/refresh-stations` and `/api/retrain-model` using the shared bearer secret.
 
 Deploy manually:
 
@@ -165,7 +183,10 @@ npx vercel deploy --prod --yes
 
 ## Operational notes
 
-- The forecast quality improves over time as `station_observations` grows.
+- Ingestion cadence is hourly.
+- Inference refreshes whenever new observation context is written or a forecast request is made.
+- Retraining cadence is scheduled and batch-based; model weights do not update continuously while the backend runs.
+- Forecast quality improves over time as `station_observations` grows.
 - Early in the history collection lifecycle, the trainer uses hybrid augmentation intentionally.
 - The frontend map is real geographic plotting, not a schematic SVG.
-- SHAP output is presented as plain-language narratives derived from exact last-step Shapley attribution over the feature context used for inference.
+- Explainability is presented as plain-language narratives derived from exact Shapley attribution over the latest feature context used for inference.

@@ -1,12 +1,10 @@
-import { createClient } from "@supabase/supabase-js";
 import { buildServerStationSnapshot } from "./_shared/live-data.js";
 import { seedStations } from "../src/data/cities.js";
 import { generateForecastPayload } from "../src/lib/model-service.js";
 import { stationToFeatureVector, LOOKBACK_STEPS } from "../src/lib/ml-sequence.js";
+import { getAdminSupabaseClient, loadActiveModelArtifact } from "./_shared/model-registry.js";
 
 const CRON_SECRET = process.env.CRON_SECRET || "";
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 
 function isAuthorized(request) {
   const header = request.headers.authorization || request.headers.Authorization || "";
@@ -29,21 +27,23 @@ export default async function handler(request, response) {
     return response.status(401).json({ error: "Unauthorized" });
   }
 
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+  const supabase = getAdminSupabaseClient();
+  if (!supabase) {
     return response.status(500).json({
       error: "Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY",
     });
   }
 
   try {
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
-    });
-
+    const activeArtifact = await loadActiveModelArtifact();
     const snapshots = await Promise.all(seedStations.map((station) => buildServerStationSnapshot(station)));
+    console.log(
+      JSON.stringify({
+        event: "station_refresh_started",
+        stationCount: snapshots.length,
+        modelVersion: activeArtifact?.version || null,
+      }),
+    );
 
     const stationRows = snapshots.map((station, index) => ({
       slug: station.id,
@@ -114,6 +114,7 @@ export default async function handler(request, response) {
     const snapshotRows = snapshots.map((station) => {
       const forecastPayload = generateForecastPayload(station, {
         historyRows: historyBySlug.get(station.id) || [],
+        artifact: activeArtifact,
       });
 
       return {
@@ -142,8 +143,15 @@ export default async function handler(request, response) {
       refreshed: snapshotRows.length,
       observedAt,
       generatedAt: new Date().toISOString(),
+      modelVersion: activeArtifact?.version || null,
     });
   } catch (error) {
+    console.error(
+      JSON.stringify({
+        event: "station_refresh_failed",
+        error: error instanceof Error ? error.message : "Refresh failed",
+      }),
+    );
     return response.status(500).json({
       error: error instanceof Error ? error.message : "Refresh failed",
     });

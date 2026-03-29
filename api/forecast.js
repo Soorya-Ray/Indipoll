@@ -1,10 +1,7 @@
-import { createClient } from "@supabase/supabase-js";
 import { generateForecastPayload } from "../src/lib/model-service.js";
 import { seedStations } from "../src/data/cities.js";
 import { LOOKBACK_STEPS } from "../src/lib/ml-sequence.js";
-
-const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+import { getAdminSupabaseClient, loadActiveModelArtifact } from "./_shared/model-registry.js";
 
 function readBody(request) {
   return new Promise((resolve, reject) => {
@@ -31,19 +28,6 @@ function readBody(request) {
   });
 }
 
-function getAdminSupabaseClient() {
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-    return null;
-  }
-
-  return createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-    },
-  });
-}
-
 function normalizeDashboardRow(row, fallback) {
   return {
     ...fallback,
@@ -67,7 +51,7 @@ async function hydrateStation(requestBody) {
   const supabase = getAdminSupabaseClient();
 
   if (!supabase || !stationSlug) {
-    return { station: { ...fallback, ...requestBody }, historyRows: [] };
+    return { station: { ...fallback, ...requestBody }, historyRows: [], artifact: null };
   }
 
   const { data: dashboardRow, error: dashboardError } = await supabase
@@ -88,7 +72,7 @@ async function hydrateStation(requestBody) {
   }
 
   if (!stationRow?.id) {
-    return { station, historyRows: [] };
+    return { station, historyRows: [], artifact: await loadActiveModelArtifact() };
   }
 
   const { data: historyRows, error: historyError } = await supabase
@@ -102,9 +86,12 @@ async function hydrateStation(requestBody) {
     throw historyError;
   }
 
+  const artifact = await loadActiveModelArtifact();
+
   return {
     station,
     historyRows: (historyRows || []).reverse(),
+    artifact,
   };
 }
 
@@ -116,8 +103,17 @@ export default async function handler(request, response) {
 
   try {
     const requestBody = await readBody(request);
-    const { station, historyRows } = await hydrateStation(requestBody);
-    const payload = generateForecastPayload(station, { historyRows });
+    const { station, historyRows, artifact } = await hydrateStation(requestBody);
+    const payload = generateForecastPayload(station, { historyRows, artifact });
+    console.log(
+      JSON.stringify({
+        event: "forecast_generated",
+        station: station.id || station.city,
+        modelVersion: payload.model.version,
+        historySamples: payload.model.historySamples,
+        qualityState: payload.model.evaluation?.station ? "station-backed" : payload.model.evaluation ? "global-backed" : "limited-evidence",
+      }),
+    );
     return response.status(200).json(payload);
   } catch (error) {
     return response.status(400).json({

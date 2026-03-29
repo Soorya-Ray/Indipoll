@@ -10,11 +10,10 @@ import {
   buildContextSequence,
   buildTrainingSet,
   buildTrainingSetFromObservationRows,
-  featureObjectToArray,
   historyRowsToSequence,
   mean,
-  observationToFeatureVector,
 } from "../src/lib/ml-sequence.js";
+import { buildEvaluationWindows, buildTrainingWindow, decidePromotion, evaluateModel } from "../src/lib/model-evaluation.js";
 
 const OUTPUT_PATH = path.resolve(process.cwd(), "src/data/ml-model-artifact.generated.js");
 
@@ -60,166 +59,9 @@ function normalizeTargets(targets, stats) {
   return targets.map((target) => target.map((value) => (value - stats.mean) / stats.std));
 }
 
-function normalizeSequence(sequence, stats) {
-  return sequence.map((step) => step.map((value, index) => (value - stats.mean[index]) / stats.std[index]));
-}
-
-function denormalizeOutputs(outputs, stats) {
-  return outputs.map((value) => value * stats.std + stats.mean);
-}
-
 function averageLastStep(sequences, featureStats) {
   const columns = transposeLastStep(sequences);
   return columns.map((column, index) => (mean(column) - featureStats.mean[index]) / featureStats.std[index]);
-}
-
-function buildEvaluationWindows(rows) {
-  const grouped = new Map();
-
-  rows.forEach((row) => {
-    if (!row.station_slug) {
-      return;
-    }
-
-    if (!grouped.has(row.station_slug)) {
-      grouped.set(row.station_slug, []);
-    }
-
-    grouped.get(row.station_slug).push(row);
-  });
-
-  const windows = [];
-
-  grouped.forEach((stationRows, stationSlug) => {
-    const sortedRows = [...stationRows].sort((left, right) => new Date(left.observed_at) - new Date(right.observed_at));
-    if (sortedRows.length < LOOKBACK_STEPS + HORIZON_STEPS) {
-      return;
-    }
-
-    for (let index = LOOKBACK_STEPS; index <= sortedRows.length - HORIZON_STEPS; index += 1) {
-      const contextRows = sortedRows.slice(index - LOOKBACK_STEPS, index);
-      const targetRows = sortedRows.slice(index, index + HORIZON_STEPS);
-
-      windows.push({
-        stationId: stationSlug,
-        stationCity: sortedRows[index - 1]?.station_city || stationSlug,
-        sequence: contextRows.map((row) => featureObjectToArray(observationToFeatureVector(row))),
-        target: targetRows.map((row) => row.aqi),
-      });
-    }
-  });
-
-  return windows;
-}
-
-function roundMetric(value, digits = 3) {
-  return Number(value.toFixed(digits));
-}
-
-function summarizeErrors(values) {
-  if (!values.length) {
-    return { rmse: 0, mae: 0 };
-  }
-
-  const squaredMean = mean(values.map((value) => value ** 2));
-  return {
-    rmse: roundMetric(Math.sqrt(squaredMean) || 0),
-    mae: roundMetric(mean(values.map((value) => Math.abs(value)))),
-  };
-}
-
-async function evaluateModel(model, windows, featureStats, targetStats) {
-  if (!windows.length) {
-    return null;
-  }
-
-  const evaluationTensor = tf.tensor3d(windows.map((window) => normalizeSequence(window.sequence, featureStats)));
-  const predictionTensor = model.predict(evaluationTensor);
-  const predictionRows = await predictionTensor.array();
-
-  tf.dispose([evaluationTensor, predictionTensor]);
-
-  const overallResiduals = [];
-  const persistenceResiduals = [];
-  const horizonBuckets = Array.from({ length: HORIZON_STEPS }, () => []);
-  const persistenceHorizonBuckets = Array.from({ length: HORIZON_STEPS }, () => []);
-  const cityBuckets = new Map();
-
-  windows.forEach((window, index) => {
-    const prediction = denormalizeOutputs(predictionRows[index], targetStats);
-    const persistence = Array(HORIZON_STEPS).fill(window.sequence[window.sequence.length - 1][0]);
-
-    window.target.forEach((actual, horizonIndex) => {
-      const residual = prediction[horizonIndex] - actual;
-      const persistenceResidual = persistence[horizonIndex] - actual;
-
-      overallResiduals.push(residual);
-      persistenceResiduals.push(persistenceResidual);
-      horizonBuckets[horizonIndex].push(residual);
-      persistenceHorizonBuckets[horizonIndex].push(persistenceResidual);
-    });
-
-    if (!cityBuckets.has(window.stationId)) {
-      cityBuckets.set(window.stationId, {
-        city: window.stationCity,
-        residuals: [],
-        persistenceResiduals: [],
-        samples: 0,
-      });
-    }
-
-    const bucket = cityBuckets.get(window.stationId);
-    bucket.samples += 1;
-    bucket.residuals.push(...window.target.map((actual, horizonIndex) => prediction[horizonIndex] - actual));
-    bucket.persistenceResiduals.push(
-      ...window.target.map((actual, horizonIndex) => persistence[horizonIndex] - actual),
-    );
-  });
-
-  const overall = summarizeErrors(overallResiduals);
-  const persistence = summarizeErrors(persistenceResiduals);
-  const persistenceDelta =
-    persistence.rmse > 0 ? roundMetric(((persistence.rmse - overall.rmse) / persistence.rmse) * 100, 1) : 0;
-
-  return {
-    samples: windows.length,
-    rmse: overall.rmse,
-    mae: overall.mae,
-    persistenceRmse: persistence.rmse,
-    persistenceMae: persistence.mae,
-    persistenceDelta,
-    horizon: horizonBuckets.map((bucket, index) => {
-      const horizonSummary = summarizeErrors(bucket);
-      const persistenceSummary = summarizeErrors(persistenceHorizonBuckets[index]);
-      return {
-        step: index + 1,
-        label: `${(index + 1) * 6}h`,
-        rmse: horizonSummary.rmse,
-        mae: horizonSummary.mae,
-        persistenceRmse: persistenceSummary.rmse,
-        persistenceMae: persistenceSummary.mae,
-      };
-    }),
-    cities: [...cityBuckets.entries()]
-      .map(([stationId, bucket]) => {
-        const citySummary = summarizeErrors(bucket.residuals);
-        const persistenceSummary = summarizeErrors(bucket.persistenceResiduals);
-        return {
-          stationId,
-          city: bucket.city,
-          samples: bucket.samples,
-          rmse: citySummary.rmse,
-          mae: citySummary.mae,
-          persistenceRmse: persistenceSummary.rmse,
-          persistenceMae: persistenceSummary.mae,
-          persistenceDelta:
-            persistenceSummary.rmse > 0
-              ? roundMetric(((persistenceSummary.rmse - citySummary.rmse) / persistenceSummary.rmse) * 100, 1)
-              : 0,
-        };
-      })
-      .sort((left, right) => left.city.localeCompare(right.city)),
-  };
 }
 
 async function loadLocalEnv() {
@@ -332,9 +174,32 @@ async function saveModelRecord(artifact, metadata) {
     },
   });
 
-  const { error: deactivateError } = await supabase.from("model_artifacts").update({ is_active: false }).eq("is_active", true);
-  if (deactivateError) {
-    throw deactivateError;
+  const { data: activeArtifactRow, error: activeArtifactError } = await supabase
+    .from("model_artifacts")
+    .select("version, artifact, is_active")
+    .eq("is_active", true)
+    .order("trained_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (activeArtifactError) {
+    throw activeArtifactError;
+  }
+
+  const promotionDecision = decidePromotion(artifact.evaluationSummary, activeArtifactRow?.artifact || null);
+  artifact.promotion = {
+    status: promotionDecision.status,
+    reason: promotionDecision.reason,
+    predecessorVersion: promotionDecision.predecessorVersion,
+  };
+  const dbEvaluationSummary = artifact.evaluationSummary || {};
+  const dbEvaluationByHorizon = artifact.evaluationSummary?.horizon || [];
+  const dbEvaluationByStation = artifact.evaluationSummary?.cities || [];
+
+  if (promotionDecision.shouldPromote) {
+    const { error: deactivateError } = await supabase.from("model_artifacts").update({ is_active: false }).eq("is_active", true);
+    if (deactivateError) {
+      throw deactivateError;
+    }
   }
 
   const { error: insertError } = await supabase.from("model_artifacts").upsert(
@@ -347,8 +212,14 @@ async function saveModelRecord(artifact, metadata) {
       lookback_steps: artifact.lookback,
       horizon_steps: artifact.horizon,
       metrics: metadata.metrics,
+      evaluation_summary: dbEvaluationSummary,
+      training_window_start: artifact.trainingWindow.start,
+      training_window_end: artifact.trainingWindow.end,
+      predecessor_version: artifact.promotion.predecessorVersion,
+      promotion_status: artifact.promotion.status,
+      promotion_reason: artifact.promotion.reason,
       artifact,
-      is_active: true,
+      is_active: promotionDecision.shouldPromote,
     },
     { onConflict: "version" },
   );
@@ -356,9 +227,30 @@ async function saveModelRecord(artifact, metadata) {
   if (insertError) {
     throw insertError;
   }
+
+  const { error: evaluationInsertError } = await supabase.from("model_evaluations").insert({
+    model_version: artifact.version,
+    summary: dbEvaluationSummary,
+    by_horizon: dbEvaluationByHorizon,
+    by_station: dbEvaluationByStation,
+  });
+
+  if (evaluationInsertError) {
+    throw evaluationInsertError;
+  }
+
+  console.log(
+    JSON.stringify({
+      event: "model_promotion_decision",
+      version: artifact.version,
+      promotion: artifact.promotion,
+      evaluation: artifact.evaluationSummary,
+    }),
+  );
 }
 
-async function main() {
+export async function runTrainingPipeline(options = {}) {
+  const writeLocalArtifact = options.writeLocalArtifact ?? true;
   const historicalRows = await fetchHistoricalObservations();
   const historicalSet = buildTrainingSetFromObservationRows(historicalRows);
   const syntheticSet = buildTrainingSet(seedStations);
@@ -450,7 +342,8 @@ async function main() {
 
   const trainedAt = new Date().toISOString();
   const evaluationWindows = buildEvaluationWindows(historicalRows);
-  const evaluationSummary = await evaluateModel(model, evaluationWindows, featureStats, targetStats);
+  const evaluationSummary = await evaluateModel(model, evaluationWindows, featureStats, targetStats, tf);
+  const trainingWindow = buildTrainingWindow(historicalRows);
   const metrics = {
     validation_rmse: Number((residualStdNormalized * targetStats.std).toFixed(3)),
     validation_mae: Number((maeNormalized * targetStats.std).toFixed(3)),
@@ -460,6 +353,7 @@ async function main() {
     evaluation_window_count: evaluationWindows.length,
     evaluation_rmse: evaluationSummary?.rmse ?? null,
     persistence_rmse: evaluationSummary?.persistenceRmse ?? null,
+    rolling_mean_rmse: evaluationSummary?.rollingMeanRmse ?? null,
   };
 
   const artifact = {
@@ -477,6 +371,12 @@ async function main() {
     stationCount: Math.max(historicalSet.stationCount, seedStations.length),
     metrics,
     evaluationSummary,
+    promotion: {
+      status: "shadow",
+      reason: "awaiting-registry-decision",
+      predecessorVersion: null,
+    },
+    trainingWindow,
     seedContext: stationContext,
     weights: {
       kernel: await kernel.array(),
@@ -487,8 +387,10 @@ async function main() {
     },
   };
 
-  const fileContents = `const artifact = ${JSON.stringify(artifact, null, 2)};\n\nexport default artifact;\n`;
-  await fs.writeFile(OUTPUT_PATH, fileContents, "utf8");
+  if (writeLocalArtifact) {
+    const fileContents = `const artifact = ${JSON.stringify(artifact, null, 2)};\n\nexport default artifact;\n`;
+    await fs.writeFile(OUTPUT_PATH, fileContents, "utf8");
+  }
 
   await saveModelRecord(artifact, {
     dataSource: artifact.dataSource,
@@ -500,12 +402,33 @@ async function main() {
   tf.dispose([trainX, trainY, validationX, validationY, validationPredictions]);
   await tf.nextFrame();
 
-  console.log(`Wrote model artifact to ${OUTPUT_PATH}`);
+  if (writeLocalArtifact) {
+    console.log(`Wrote model artifact to ${OUTPUT_PATH}`);
+  }
   console.log(`Training data source: ${artifact.dataSource}`);
   console.log(`Historical observations used: ${historicalRows.length}`);
+  console.log(
+    JSON.stringify({
+      event: "model_training_complete",
+      version: artifact.version,
+      evaluation: artifact.evaluationSummary,
+      promotion: artifact.promotion,
+      trainingWindow: artifact.trainingWindow,
+    }),
+  );
+
+  return {
+    artifact,
+  };
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+async function main() {
+  await runTrainingPipeline();
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}
