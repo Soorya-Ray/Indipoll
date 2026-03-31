@@ -18,7 +18,11 @@ function useTheme() {
   useEffect(() => {
     document.documentElement.classList.toggle("light", theme === "light");
     document.documentElement.style.colorScheme = theme;
-    try { localStorage.setItem("indipoll-theme", theme); } catch {}
+    try {
+      localStorage.setItem("indipoll-theme", theme);
+    } catch {
+      console.warn("[indipoll] Unable to persist theme preference");
+    }
   }, [theme]);
 
   const toggle = () => setTheme((prev) => (prev === "dark" ? "light" : "dark"));
