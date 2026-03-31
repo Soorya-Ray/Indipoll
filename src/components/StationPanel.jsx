@@ -29,6 +29,49 @@ function MetricRows({ metrics, formatter = (value) => `${value}%` }) {
   );
 }
 
+function ForecastSparkline({ values, label }) {
+  if (!values?.length) {
+    return null;
+  }
+
+  const width = 260;
+  const height = 72;
+  const padding = 6;
+  const max = Math.max(...values);
+  const min = Math.min(...values);
+  const range = Math.max(max - min, 1);
+  const x = (index) => padding + (index / Math.max(values.length - 1, 1)) * (width - padding * 2);
+  const y = (value) => height - padding - ((value - min) / range) * (height - padding * 2);
+  const path = values.map((value, index) => `${index === 0 ? "M" : "L"} ${x(index)} ${y(value)}`).join(" ");
+
+  return (
+    <div className="station-trend">
+      <div className="station-trend-header">
+        <div>
+          <h3>72-hour trend</h3>
+          <p>Current forecast path from the selected station model</p>
+        </div>
+        <strong>
+          {values[0]} to {values[values.length - 1]} AQI
+        </strong>
+      </div>
+      <svg viewBox={`0 0 ${width} ${height}`} className="station-trend-chart" aria-label={label}>
+        <rect x="0" y="0" width={width} height={height} rx="18" fill="var(--chart-bg)" />
+        <path d={path} fill="none" stroke="var(--chart-line)" strokeWidth="3.5" strokeLinecap="round" />
+        {values.map((value, index) => (
+          <circle
+            key={`${index}-${value}`}
+            cx={x(index)}
+            cy={y(value)}
+            r={index === values.length - 1 ? 4.5 : 3}
+            fill={index === values.length - 1 ? "var(--chart-point-current)" : "var(--chart-point)"}
+          />
+        ))}
+      </svg>
+    </div>
+  );
+}
+
 export default function StationPanel({ station }) {
   const severity = getSeverity(station.aqi);
   const topPollutant = Object.entries(station.pollutants).sort((a, b) => b[1] - a[1])[0]?.[0] || "PM2.5";
@@ -75,6 +118,13 @@ export default function StationPanel({ station }) {
             <p>Estimated share of local air burden</p>
           </div>
           <MetricRows metrics={station.sources} />
+        </section>
+
+        <section className="subpanel">
+          <ForecastSparkline
+            values={station.forecast?.values || []}
+            label={`${station.city} forecast trend`}
+          />
         </section>
 
         <section className="subpanel">

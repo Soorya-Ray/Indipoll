@@ -22,7 +22,7 @@ export default function ForecastChart({ station }) {
 
   return (
     <svg viewBox={`0 0 ${width} ${height}`} className="forecast-chart" aria-label={`${station.city} AQI forecast chart`}>
-      <rect x="0" y="0" width={width} height={height} rx="24" fill="rgba(255,255,255,0.02)" />
+      <rect x="0" y="0" width={width} height={height} rx="24" fill="var(--chart-bg)" />
       {ticks.map((tick) => (
         <g key={tick}>
           <line
@@ -30,25 +30,31 @@ export default function ForecastChart({ station }) {
             x2={width - padding.right}
             y1={y(tick)}
             y2={y(tick)}
-            stroke="rgba(255,255,255,0.08)"
+            stroke="var(--chart-grid)"
             strokeDasharray="4 6"
           />
-          <text x="8" y={y(tick) + 4} fill="#9bb5aa" fontSize="12">
+          <text x="8" y={y(tick) + 4} fill="var(--chart-axis-text)" fontSize="12">
             {tick}
           </text>
         </g>
       ))}
       {labels.map((label, index) => (
-        <text key={label} x={x(index)} y={height - 10} textAnchor="middle" fill="#9bb5aa" fontSize="12">
+        <text key={label} x={x(index)} y={height - 10} textAnchor="middle" fill="var(--chart-axis-text)" fontSize="12">
           {label}
         </text>
       ))}
-      <path d={`${areaPath} Z`} fill="rgba(127, 224, 184, 0.16)" />
-      <path d={linePath} fill="none" stroke="#8bf0c4" strokeWidth="4" strokeLinecap="round" />
+      <path d={`${areaPath} Z`} fill="var(--chart-band-fill)" />
+      <path d={linePath} fill="none" stroke="var(--chart-line)" strokeWidth="4" strokeLinecap="round" />
       {values.map((value, index) => (
-        <circle key={`${index}-${value}`} cx={x(index)} cy={y(value)} r="5" fill={index === 0 ? "#f4c25b" : "#8bf0c4"} />
+        <circle
+          key={`${index}-${value}`}
+          cx={x(index)}
+          cy={y(value)}
+          r="5"
+          fill={index === 0 ? "var(--chart-point-current)" : "var(--chart-point)"}
+        />
       ))}
-      <text x={padding.left} y="14" fill="#edf6f1" fontSize="14" fontWeight="700">
+      <text x={padding.left} y="14" fill="var(--chart-title)" fontSize="14" fontWeight="700">
         {station.city} forecast · {station.forecastMode === "live" ? "Connected" : "LSTM-style fallback"} confidence band
       </text>
     </svg>

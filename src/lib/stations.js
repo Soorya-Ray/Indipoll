@@ -17,6 +17,7 @@ function normalizeStationRow(row, fallback) {
     forecast: row.forecast || fallback?.forecast,
     shap: row.shap || fallback?.shap,
     model: row.model_metadata || fallback?.model,
+    rawUpdatedAt: row.updated_at || fallback?.rawUpdatedAt || null,
     updatedAt: row.updated_at
       ? new Intl.DateTimeFormat("en-IN", {
           dateStyle: "medium",
@@ -32,22 +33,34 @@ function normalizeStationRow(row, fallback) {
 export async function fetchStationDashboard(seedStations) {
   const supabase = await getSupabaseClient();
   if (!supabase) {
+    console.warn("[indipoll] No Supabase client available");
     return null;
   }
 
-  const { data, error } = await supabase
-    .from("station_dashboard")
-    .select(
-      "slug, city, station_name, latitude, longitude, map_x, map_y, priority, aqi, pollutants, sources, weather, forecast, shap, model_metadata, data_mode, forecast_mode, updated_at",
-    )
-    .order("priority", { ascending: true });
+  try {
+    const { data, error } = await supabase
+      .from("station_dashboard")
+      .select(
+        "slug, city, station_name, latitude, longitude, map_x, map_y, priority, aqi, pollutants, sources, weather, forecast, shap, model_metadata, data_mode, forecast_mode, updated_at",
+      )
+      .order("priority", { ascending: true });
 
-  if (error || !data?.length) {
+    if (error) {
+      console.warn("[indipoll] Supabase dashboard query failed:", error.message);
+      return null;
+    }
+
+    if (!data?.length) {
+      console.warn("[indipoll] Supabase dashboard returned empty results");
+      return null;
+    }
+
+    return data.map((row) => {
+      const fallback = seedStations.find((station) => station.id === row.slug || station.city === row.city);
+      return normalizeStationRow(row, fallback);
+    });
+  } catch (err) {
+    console.warn("[indipoll] Supabase dashboard query threw:", err.message || err);
     return null;
   }
-
-  return data.map((row) => {
-    const fallback = seedStations.find((station) => station.id === row.slug || station.city === row.city);
-    return normalizeStationRow(row, fallback);
-  });
 }

@@ -150,6 +150,10 @@ export function generateForecastPayload(station, options = {}) {
   const evaluationSummary = artifact.evaluationSummary?.samples ? artifact.evaluationSummary : null;
   const stationEvaluation = findStationEvaluation(evaluationSummary, station);
 
+  const realHistorySamples = options.historyRows?.length || 0;
+  const usedSeedContext = !realHistorySamples && artifact.seedContext?.[station.id];
+  const contextSource = realHistorySamples ? "observation-history" : usedSeedContext ? "seed-context" : "synthetic-fallback";
+
   return {
     forecast: {
       values: rawForecast,
@@ -183,7 +187,8 @@ export function generateForecastPayload(station, options = {}) {
             station: stationEvaluation,
           }
         : null,
-      historySamples: options.historyRows?.length || 0,
+      historySamples: realHistorySamples,
+      contextSource,
     },
     mode: "live",
   };

@@ -86,6 +86,7 @@ export default async function handler(request, response) {
 
     const { error: observationsError } = await supabase.from("station_observations").upsert(observationRows, {
       onConflict: "station_id,observed_at",
+      ignoreDuplicates: true,
     });
 
     if (observationsError) {
@@ -139,11 +140,25 @@ export default async function handler(request, response) {
       throw snapshotsError;
     }
 
+    const dataModes = snapshotRows.map((row) => row.data_mode);
+    const forecastModes = snapshotRows.map((row) => row.forecast_mode);
+    console.log(
+      JSON.stringify({
+        event: "station_refresh_complete",
+        refreshed: snapshotRows.length,
+        observedAt,
+        waqiCount: dataModes.filter((mode) => mode === "waqi").length,
+        liveForecastCount: forecastModes.filter((mode) => mode === "live").length,
+        modelVersion: activeArtifact?.version || null,
+      }),
+    );
+
     return response.status(200).json({
       refreshed: snapshotRows.length,
       observedAt,
       generatedAt: new Date().toISOString(),
       modelVersion: activeArtifact?.version || null,
+      dataModes: { waqi: dataModes.filter((mode) => mode === "waqi").length, hybrid: dataModes.filter((mode) => mode !== "waqi").length },
     });
   } catch (error) {
     console.error(

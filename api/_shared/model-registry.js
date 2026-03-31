@@ -22,17 +22,23 @@ export async function loadActiveModelArtifact() {
     return null;
   }
 
-  const { data, error } = await supabase
-    .from("model_artifacts")
-    .select("artifact")
-    .eq("is_active", true)
-    .order("trained_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  try {
+    const { data, error } = await supabase
+      .from("model_artifacts")
+      .select("artifact")
+      .eq("is_active", true)
+      .order("trained_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
 
-  if (error) {
-    throw error;
+    if (error) {
+      console.error(JSON.stringify({ event: "model_artifact_load_failed", error: error.message }));
+      return null;
+    }
+
+    return data?.artifact || null;
+  } catch (err) {
+    console.error(JSON.stringify({ event: "model_artifact_load_failed", error: String(err) }));
+    return null;
   }
-
-  return data?.artifact || null;
 }

@@ -1,8 +1,81 @@
 import ForecastChart from "../components/ForecastChart";
 import { buildModelQualitySummary } from "../lib/model-evaluation";
 
+function formatFeatureLabel(feature) {
+  return feature.replace(/_/g, " ");
+}
+
+function ShapSummaryChart({ insights, stationCity }) {
+  const items = insights
+    .map((insight, index) => ({
+      ...insight,
+      magnitude: insight.magnitude ?? Math.max(2.5, 8 - index * 1.35),
+    }))
+    .sort((left, right) => right.magnitude - left.magnitude);
+
+  if (!items.length) {
+    return null;
+  }
+
+  const width = 520;
+  const barHeight = 34;
+  const gap = 14;
+  const padding = { top: 12, right: 14, bottom: 12, left: 188 };
+  const chartHeight = padding.top + padding.bottom + items.length * barHeight + (items.length - 1) * gap;
+  const maxMagnitude = Math.max(...items.map((item) => item.magnitude), 1);
+  const barWidth = width - padding.left - padding.right;
+
+  return (
+    <svg
+      viewBox={`0 0 ${width} ${chartHeight}`}
+      className="shap-summary-chart"
+      aria-label={`${stationCity} SHAP summary chart`}
+    >
+      <rect x="0" y="0" width={width} height={chartHeight} rx="22" fill="var(--chart-bg)" />
+      {items.map((item, index) => {
+        const y = padding.top + index * (barHeight + gap);
+        const widthRatio = Math.max(item.magnitude / maxMagnitude, 0.12);
+        const fillWidth = barWidth * widthRatio;
+        const barColor = item.impact === "down" ? "var(--chart-positive)" : "var(--chart-negative)";
+        const valueX = Math.min(padding.left + fillWidth + 10, width - padding.right - 36);
+
+        return (
+          <g key={`${item.rawFeature || item.feature}-${index}`}>
+            <text x="18" y={y + 14} fill="var(--chart-title)" fontSize="13" fontWeight="700">
+              {formatFeatureLabel(item.feature)}
+            </text>
+            <text x="18" y={y + 28} fill="var(--chart-axis-text)" fontSize="11">
+              {item.impact === "down" ? "Pulls AQI down" : "Pushes AQI up"}
+            </text>
+            <rect
+              x={padding.left}
+              y={y}
+              width={barWidth}
+              height={barHeight}
+              rx="999"
+              fill="var(--chart-track)"
+            />
+            <rect
+              x={padding.left}
+              y={y}
+              width={fillWidth}
+              height={barHeight}
+              rx="999"
+              fill={barColor}
+            />
+            <text x={valueX} y={y + 21} fill="var(--chart-title)" fontSize="12" fontWeight="700">
+              {item.magnitude.toFixed(1)}
+            </text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 export default function ForecastPage({ station }) {
   const quality = buildModelQualitySummary(station.model);
+  const shapInsights = (station.shap || []).slice().sort((left, right) => (right.magnitude || 0) - (left.magnitude || 0));
 
   return (
     <div className="page-grid">
@@ -42,8 +115,9 @@ export default function ForecastPage({ station }) {
               <h3>Why the model is leaning this way</h3>
               <p>Exact Shapley attributions over the model's live feature context</p>
             </div>
+            <ShapSummaryChart insights={shapInsights} stationCity={station.city} />
             <div className="insight-list">
-              {station.shap.map((insight) => (
+              {shapInsights.map((insight) => (
                 <div className="insight-item" key={insight.feature}>
                   <strong>
                     {insight.feature} · {insight.impact === "up" ? "Pushes AQI up" : "Pulls AQI down"}

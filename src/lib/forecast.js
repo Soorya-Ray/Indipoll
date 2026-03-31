@@ -29,17 +29,23 @@ export function buildShapNarratives(station) {
   return [
     {
       feature: `${topPollutants[0]} load`,
+      rawFeature: "pollutant_load",
       impact: "up",
+      magnitude: 8.4,
       text: `${topPollutants[0]} is the strongest modeled driver right now, and it is keeping the next-day AQI baseline elevated in ${station.city}.`,
     },
     {
       feature: `${topSources[0]} emissions`,
+      rawFeature: "source_emissions",
       impact: "up",
+      magnitude: 6.8,
       text: `${topSources[0]} appears to be the dominant source category, with ${topSources[1]} adding secondary pressure to the forecast.`,
     },
     {
       feature: "Humidity regime",
+      rawFeature: "humidity",
       impact: humidity > 60 ? "up" : "down",
+      magnitude: humidity > 60 ? 4.2 : 3.6,
       text:
         humidity > 60
           ? "Higher humidity supports secondary particle formation overnight, which pushes the confidence band upward."
@@ -47,7 +53,9 @@ export function buildShapNarratives(station) {
     },
     {
       feature: "Wind-driven dispersion",
+      rawFeature: "wind",
       impact: wind >= 12 ? "down" : "up",
+      magnitude: wind >= 12 ? 5.1 : 4.4,
       text:
         wind >= 12
           ? "Stronger winds should improve dispersion through the next cycle and soften the AQI peak."

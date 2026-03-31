@@ -1,133 +1,109 @@
 # Indipoll
 
-Indipoll is a national air quality intelligence platform for India. It combines live AQI feeds, weather context, pollutant/source attribution, personalized health advisories, citizen pollution reports, and an LSTM-based AQI forecasting pipeline with exact Shapley attribution over the latest feature context.
+Indipoll is a national air quality intelligence platform for India. It combines live AQI feeds, weather context, pollutant and source attribution, community reporting, health guidance, and a 72-hour LSTM forecast lab with SHAP-based explainability.
 
 Production: [https://indipoll.vercel.app](https://indipoll.vercel.app)
 
 ## What the app does
 
-- Shows 10 major Indian cities on an interactive Leaflet map with severity-colored station markers.
-- Displays live AQI, pollutant mix, source attribution, and current weather for each tracked city.
-- Generates a 72-hour AQI forecast with confidence bands.
-- Explains forecast movement using exact Shapley attribution over the model's live feature context.
-- Adapts advisories by health profile: asthmatic, elderly, child, outdoor worker, healthy adult.
-- Lets citizens submit community pollution reports that are persisted in Supabase and reflected in the UI.
+- Maps 10 major Indian cities with live or fallback AQI snapshots.
+- Shows pollutant mix, source attribution, current weather, and station detail panels.
+- Generates a 72-hour AQI outlook with confidence bands.
+- Explains forecast movement with SHAP narratives and a visual SHAP summary chart.
+- Supports light and dark mode with persistent theme preference.
+- Collects community pollution reports in Supabase.
 
 ## Stack
 
 - Frontend: React 19, Vite, React Router, Leaflet, React Leaflet
-- Backend: Vercel serverless functions
-- Data: Supabase Postgres + Realtime
-- ML: TensorFlow.js LSTM training pipeline with serialized artifact inference
-- External data: WAQI for AQI, Open-Meteo for weather
+- Backend: Vercel Functions
+- Data: Supabase Postgres
+- ML: TensorFlow.js LSTM training and serialized artifact inference
+- External data: WAQI and Open-Meteo
 
 ## Project structure
 
-- [`/Users/drspray/Desktop/indipoll/src`](./src): React app pages, components, styling, client libraries
-- [`/Users/drspray/Desktop/indipoll/api`](./api): Vercel serverless endpoints for live bundle, forecasting, and refresh
-- [`/Users/drspray/Desktop/indipoll/scripts`](./scripts): model training workflow
-- [`/Users/drspray/Desktop/indipoll/supabase/migrations`](./supabase/migrations): database schema and seed migrations
+- [`src`](./src): app pages, components, hooks, client libraries, generated artifact
+- [`api`](./api): Vercel Functions for health, live bundle, refresh, forecast, retraining
+- [`scripts`](./scripts): local training and refresh workflows
+- [`supabase/migrations`](./supabase/migrations): schema and migration history
 
-## Data flow
+## Core flows
 
-### 1. Live ingestion
+### Live ingestion
 
-- [`/Users/drspray/Desktop/indipoll/api/refresh-stations.js`](./api/refresh-stations.js) fetches live AQI and weather for the tracked cities.
-- The route upserts canonical station rows into `public.stations`.
-- The same refresh writes an append-only hourly observation into `public.station_observations`.
-- After observation writes, the route rebuilds `public.station_snapshots` with fresh forecast and SHAP outputs.
-- Upstream AQI and weather fetching stays server-side only.
+- [`api/refresh-stations.js`](./api/refresh-stations.js) fetches AQI and weather for tracked cities.
+- The refresh route upserts canonical station rows, appends hourly observations, and refreshes `station_snapshots`.
+- Each snapshot stores forecast output, SHAP output, and model metadata for dashboard reads.
 
-### 2. Dashboard reads
+### Dashboard reads
 
-- The frontend first reads `public.station_dashboard` through Supabase using [`/Users/drspray/Desktop/indipoll/src/lib/stations.js`](./src/lib/stations.js).
-- If Supabase is unavailable, it falls back to [`/Users/drspray/Desktop/indipoll/api/live-bundle.js`](./api/live-bundle.js).
+- The frontend prefers `station_dashboard` through [`src/lib/stations.js`](./src/lib/stations.js).
+- If Supabase is unavailable, it falls back to [`api/live-bundle.js`](./api/live-bundle.js).
+- If live APIs fail completely, the UI falls back to seed/demo data and shows a warning banner.
 
-### 3. Forecast inference
+### Forecast inference
 
-- [`/Users/drspray/Desktop/indipoll/api/forecast.js`](./api/forecast.js) resolves the requested station from Supabase when possible.
-- It loads the latest observation history for that station and passes it into [`/Users/drspray/Desktop/indipoll/src/lib/model-service.js`](./src/lib/model-service.js).
-- The forecast API prefers the active promoted model artifact from Supabase.
-- The model service falls back to the local serialized artifact in [`/Users/drspray/Desktop/indipoll/src/data/ml-model-artifact.generated.js`](./src/data/ml-model-artifact.generated.js) if no active model is available.
+- [`api/forecast.js`](./api/forecast.js) resolves the station, history context, and model artifact.
+- [`src/lib/model-service.js`](./src/lib/model-service.js) generates the 72-hour forecast and SHAP attributions.
+- The forecast UI in [`src/pages/ForecastPage.jsx`](./src/pages/ForecastPage.jsx) renders both the forecast line chart and the SHAP bar summary.
 
-## ML pipeline
+## Model pipeline
 
-### Training source
+### Model versioning
 
-The trainer now prefers real historical observations from `public.station_observations`.
+- New locally trained artifacts are named `indipoll-lstm-v3.0-YYYY-MM-DD`.
+- The checked-in fallback artifact lives in [`src/data/ml-model-artifact.generated.js`](./src/data/ml-model-artifact.generated.js).
 
-- If enough real history exists, training uses Supabase history only.
-- If the history window is still too small, training uses a hybrid dataset:
-  real observations + seeded synthetic augmentation.
+### Training and promotion
 
-This makes the project usable immediately while naturally improving as the cron job accumulates more hourly observations.
+- Run training with `npm run train:model`.
+- Run a manual refresh with `npm run refresh:stations`.
+- The trainer prefers real `station_observations`, then uses seeded augmentation only when history is still sparse.
+- Promotion remains conservative: `MIN_REAL_EVALUATION_WINDOWS` stays at 8 in [`src/lib/model-evaluation.js`](./src/lib/model-evaluation.js).
+- Early models can remain in `shadow` until enough contiguous real hourly observations accumulate.
 
-### Promotion and backtesting
+## Recent robustness improvements
 
-- Retraining is batch-only and never runs continuously inside the serving process.
-- Each candidate model is backtested against:
-  - persistence baseline
-  - rolling-mean baseline
-- Promotion is conservative:
-  - a candidate must have enough real evaluation windows
-  - a candidate must beat persistence on RMSE
-  - otherwise the current active artifact remains active
-- Evaluation outputs are stored in `public.model_artifacts` and `public.model_evaluations`.
+- Model artifact loading now degrades safely when Supabase registry reads fail.
+- Station refresh logging now records data mode counts and active model version.
+- Observation inserts ignore duplicates for the same station and hour.
+- Model registry writes use safer rollback behavior during promotion.
+- The UI now exposes offline or seed-data fallback state more clearly.
+- Forecast payloads now expose `contextSource` so seed-context versus real-history behavior is visible.
 
-### Training script
+## Light and dark mode
 
-Run:
+- Theme preference is stored in `localStorage` under `indipoll-theme`.
+- The navbar includes a toggle that switches the entire app and charts between dark and light themes.
+- The preference persists across reloads.
 
-```bash
-npm run train:model
-```
+## SHAP visualization
 
-Manual refresh:
+- Forecast Lab shows a horizontal SHAP summary chart above the existing text explanations.
+- Green bars indicate features pulling AQI down.
+- Amber and red bars indicate features pushing AQI up.
+- Seed fallback data also includes magnitude values so the chart still renders when live SHAP values are unavailable.
 
-```bash
-npm run refresh:stations
-```
+## Health endpoint
 
-The script:
+`GET /api/health`
 
-- loads Supabase history from `station_observations`
-- builds multivariate sequences with a 24-step lookback and 12-step horizon
-- fits an LSTM using TensorFlow.js
-- backtests the candidate on real observation windows when enough history exists
-- writes the local inference artifact to [`/Users/drspray/Desktop/indipoll/src/data/ml-model-artifact.generated.js`](./src/data/ml-model-artifact.generated.js)
-- stores model lineage in `public.model_artifacts`
-- promotes the candidate only if it beats the persistence baseline with enough real windows
+Returns a public JSON health payload with:
 
-Key files:
+- `status`
+- `checkedAt`
+- `lastSnapshotAt`
+- `snapshotAgeMinutes`
+- `observationCount`
+- `stationCount`
+- `activeModel`
 
-- [`/Users/drspray/Desktop/indipoll/scripts/train-lstm.mjs`](./scripts/train-lstm.mjs)
-- [`/Users/drspray/Desktop/indipoll/src/lib/ml-sequence.js`](./src/lib/ml-sequence.js)
-- [`/Users/drspray/Desktop/indipoll/src/lib/model-service.js`](./src/lib/model-service.js)
-
-## Database schema
-
-Core tables:
-
-- `public.stations`: canonical station metadata
-- `public.station_snapshots`: latest station state, forecast, SHAP output, model metadata
-- `public.station_observations`: append-only hourly historical feature rows used for training and context
-- `public.model_artifacts`: trained model registry and lineage metadata
-- `public.model_evaluations`: stored horizon-level and station-level backtest outputs
-- `public.community_reports`: citizen-submitted pollution events
-
-Important view:
-
-- `public.station_dashboard`: read-friendly dashboard view consumed by the frontend
-
-Relevant migrations:
-
-- [`/Users/drspray/Desktop/indipoll/supabase/migrations/20260327_indipoll_backend_upgrade.sql`](./supabase/migrations/20260327_indipoll_backend_upgrade.sql)
-- [`/Users/drspray/Desktop/indipoll/supabase/migrations/20260327_indipoll_historical_training.sql`](./supabase/migrations/20260327_indipoll_historical_training.sql)
-- [`/Users/drspray/Desktop/indipoll/supabase/migrations/20260330_indipoll_model_registry_upgrade.sql`](./supabase/migrations/20260330_indipoll_model_registry_upgrade.sql)
+The endpoint uses Supabase when configured and reports degraded status if the admin connection is unavailable.
 
 ## Environment variables
 
-Required for production-quality data:
+Required for production-quality live data:
 
 ```bash
 WAQI_TOKEN=
@@ -160,6 +136,12 @@ Start the app:
 npm run dev
 ```
 
+Run tests:
+
+```bash
+npm test
+```
+
 Build for production:
 
 ```bash
@@ -168,25 +150,20 @@ npm run build
 
 ## Deployment
 
-The app is configured for Vercel.
+- The project is configured for Vercel in [`vercel.json`](./vercel.json).
+- Hourly refresh cron hits `/api/refresh-stations`.
+- Six-hour retraining cron hits `/api/retrain-model`.
+- Both protected endpoints expect the shared bearer secret from `CRON_SECRET`.
 
-- Frontend and serverless routes deploy together.
-- A protected refresh route is used by cron to persist fresh station observations every hour.
-- A protected retrain route is used by cron to evaluate and potentially promote a new model every 6 hours.
-- Vercel cron calls both `/api/refresh-stations` and `/api/retrain-model` using the shared bearer secret.
+## Troubleshooting
 
-Deploy manually:
-
-```bash
-npx vercel deploy --prod --yes
-```
-
-## Operational notes
-
-- Ingestion cadence is hourly.
-- Inference refreshes whenever new observation context is written or a forecast request is made.
-- Retraining cadence is scheduled and batch-based; model weights do not update continuously while the backend runs.
-- Forecast quality improves over time as `station_observations` grows.
-- Early in the history collection lifecycle, the trainer uses hybrid augmentation intentionally.
-- The frontend map is real geographic plotting, not a schematic SVG.
-- Explainability is presented as plain-language narratives derived from exact Shapley attribution over the latest feature context used for inference.
+- `CRON_SECRET` is empty or missing:
+  Cron-triggered refresh and retrain calls will fail authorization even if the schedules exist.
+- Supabase env vars are missing:
+  The app will fall back to seed data, `/api/health` will report degraded status, and model registry access will be unavailable.
+- The UI shows the seed-data warning banner:
+  Live bundle loading, Supabase dashboard reads, or upstream APIs likely failed; inspect server logs first.
+- Models remain in `shadow`:
+  This is expected until enough real hourly observations accumulate for at least 8 evaluation windows.
+- Observation history is sparse:
+  Check Vercel cron and function logs for `/api/refresh-stations`; the code assumes hourly refresh, so missing rows usually means cron execution or auth failure rather than ML logic.

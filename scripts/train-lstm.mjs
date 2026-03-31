@@ -195,48 +195,59 @@ async function saveModelRecord(artifact, metadata) {
   const dbEvaluationByHorizon = artifact.evaluationSummary?.horizon || [];
   const dbEvaluationByStation = artifact.evaluationSummary?.cities || [];
 
+  const artifactRow = {
+    version: artifact.version,
+    trained_at: artifact.trainedAt,
+    data_source: metadata.dataSource,
+    sample_count: metadata.sampleCount,
+    station_count: metadata.stationCount,
+    lookback_steps: artifact.lookback,
+    horizon_steps: artifact.horizon,
+    metrics: metadata.metrics,
+    evaluation_summary: dbEvaluationSummary,
+    training_window_start: artifact.trainingWindow.start,
+    training_window_end: artifact.trainingWindow.end,
+    predecessor_version: artifact.promotion.predecessorVersion,
+    promotion_status: artifact.promotion.status,
+    promotion_reason: artifact.promotion.reason,
+    artifact,
+    is_active: promotionDecision.shouldPromote,
+  };
+
   if (promotionDecision.shouldPromote) {
     const { error: deactivateError } = await supabase.from("model_artifacts").update({ is_active: false }).eq("is_active", true);
     if (deactivateError) {
+      // Rollback: don't insert the new artifact if deactivation failed
+      console.error(JSON.stringify({ event: "model_deactivate_failed", error: deactivateError.message }));
       throw deactivateError;
     }
   }
 
-  const { error: insertError } = await supabase.from("model_artifacts").upsert(
-    {
-      version: artifact.version,
-      trained_at: artifact.trainedAt,
-      data_source: metadata.dataSource,
-      sample_count: metadata.sampleCount,
-      station_count: metadata.stationCount,
-      lookback_steps: artifact.lookback,
-      horizon_steps: artifact.horizon,
-      metrics: metadata.metrics,
-      evaluation_summary: dbEvaluationSummary,
-      training_window_start: artifact.trainingWindow.start,
-      training_window_end: artifact.trainingWindow.end,
-      predecessor_version: artifact.promotion.predecessorVersion,
-      promotion_status: artifact.promotion.status,
-      promotion_reason: artifact.promotion.reason,
-      artifact,
-      is_active: promotionDecision.shouldPromote,
-    },
-    { onConflict: "version" },
-  );
+  const { error: insertError } = await supabase.from("model_artifacts").upsert(artifactRow, { onConflict: "version" });
 
   if (insertError) {
+    // Rollback: re-activate previous model if insert failed after deactivation
+    if (promotionDecision.shouldPromote && activeArtifactRow?.version) {
+      await supabase.from("model_artifacts").update({ is_active: true }).eq("version", activeArtifactRow.version).catch(() => {});
+      console.error(JSON.stringify({ event: "model_insert_failed_rollback", rolledBackTo: activeArtifactRow.version }));
+    }
     throw insertError;
   }
 
-  const { error: evaluationInsertError } = await supabase.from("model_evaluations").insert({
-    model_version: artifact.version,
-    summary: dbEvaluationSummary,
-    by_horizon: dbEvaluationByHorizon,
-    by_station: dbEvaluationByStation,
-  });
+  // model_evaluations insert is non-fatal — table may not exist yet
+  try {
+    const { error: evaluationInsertError } = await supabase.from("model_evaluations").insert({
+      model_version: artifact.version,
+      summary: dbEvaluationSummary,
+      by_horizon: dbEvaluationByHorizon,
+      by_station: dbEvaluationByStation,
+    });
 
-  if (evaluationInsertError) {
-    throw evaluationInsertError;
+    if (evaluationInsertError) {
+      console.warn(JSON.stringify({ event: "model_evaluation_insert_skipped", error: evaluationInsertError.message }));
+    }
+  } catch (evalError) {
+    console.warn(JSON.stringify({ event: "model_evaluation_insert_skipped", error: String(evalError) }));
   }
 
   console.log(
@@ -357,7 +368,7 @@ export async function runTrainingPipeline(options = {}) {
   };
 
   const artifact = {
-    version: `indipoll-lstm-v2-${trainedAt.slice(0, 10)}`,
+    version: `indipoll-lstm-v3.0-${trainedAt.slice(0, 10)}`,
     trainedAt,
     lookback: LOOKBACK_STEPS,
     horizon: HORIZON_STEPS,

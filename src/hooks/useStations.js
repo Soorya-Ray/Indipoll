@@ -6,26 +6,33 @@ export function useStations() {
   const [stations, setStations] = useState(seedStations);
   const [selectedStationId, setSelectedStationId] = useState(seedStations[0].id);
   const [loading, setLoading] = useState(true);
+  const [dataSource, setDataSource] = useState("seed");
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     let active = true;
 
     async function hydrate() {
       setLoading(true);
-      const snapshots = await fetchStationsBundle(seedStations);
+      setError(null);
+      const result = await fetchStationsBundle(seedStations);
 
       if (!active) {
         return;
       }
 
       startTransition(() => {
-        setStations(snapshots);
+        setStations(result.stations);
+        setDataSource(result.source);
       });
       setLoading(false);
     }
 
-    hydrate().catch(() => {
+    hydrate().catch((err) => {
       if (active) {
+        console.warn("[indipoll] Station hydration failed, showing seed data:", err);
+        setError("Could not load live data. Showing demo values.");
+        setDataSource("seed");
         setLoading(false);
       }
     });
@@ -39,6 +46,8 @@ export function useStations() {
 
   return {
     loading,
+    dataSource,
+    error,
     selectedStation,
     selectedStationId,
     setSelectedStationId,

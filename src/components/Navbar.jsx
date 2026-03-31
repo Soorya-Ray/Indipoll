@@ -8,7 +8,7 @@ const links = [
   { to: "/community", label: "Community" },
 ];
 
-export default function Navbar({ apiSummary }) {
+export default function Navbar({ apiSummary, lastUpdated, theme, onToggleTheme }) {
   return (
     <header className="topbar">
       <div className="brand-block">
@@ -32,9 +32,21 @@ export default function Navbar({ apiSummary }) {
         ))}
       </nav>
 
-      <div className="status-pill" aria-live="polite">
-        <span>Data mode</span>
-        <strong>{apiSummary}</strong>
+      <div className="topbar-right">
+        <div className="status-pill" aria-live="polite">
+          <span>Data mode</span>
+          <strong>{apiSummary}</strong>
+          {lastUpdated ? <span className="last-updated">Updated {lastUpdated}</span> : null}
+        </div>
+        <button
+          type="button"
+          className="theme-toggle"
+          onClick={onToggleTheme}
+          aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+        >
+          {theme === "dark" ? "\u2600" : "\u263D"}
+        </button>
       </div>
     </header>
   );

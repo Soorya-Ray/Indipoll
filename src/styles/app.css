@@ -7,6 +7,66 @@
   --text: #edf6f1;
   --muted: #9bb5aa;
   --shadow: 0 28px 60px rgba(0, 0, 0, 0.35);
+  --surface-soft: rgba(255, 255, 255, 0.04);
+  --surface-strong: rgba(255, 255, 255, 0.05);
+  --surface-border: rgba(255, 255, 255, 0.08);
+  --grid-line: rgba(255, 255, 255, 0.03);
+  --accent-cool: #8bf0c4;
+  --accent-warm: #f4c25b;
+  --accent-hot: #f2876b;
+  --warning-bg: rgba(246, 199, 92, 0.14);
+  --warning-border: rgba(246, 199, 92, 0.3);
+  --warning-text: #f6c75c;
+  --chart-bg: rgba(255, 255, 255, 0.02);
+  --chart-grid: rgba(255, 255, 255, 0.08);
+  --chart-axis-text: #9bb5aa;
+  --chart-title: #edf6f1;
+  --chart-line: #8bf0c4;
+  --chart-band-fill: rgba(127, 224, 184, 0.16);
+  --chart-point: #8bf0c4;
+  --chart-point-current: #f4c25b;
+  --chart-track: rgba(255, 255, 255, 0.08);
+  --chart-positive: #73d7a5;
+  --chart-negative: #f2876b;
+  --map-stage-start: rgba(10, 36, 31, 0.98);
+  --map-stage-end: rgba(5, 19, 16, 0.95);
+  --map-stage-glow: rgba(127, 224, 184, 0.12);
+  --control-bg: rgba(8, 20, 18, 0.92);
+  --popup-bg: rgba(9, 27, 23, 0.96);
+}
+
+:root.light {
+  --bg: #f5f7f6;
+  --bg-soft: rgba(255, 255, 255, 0.92);
+  --panel: rgba(255, 255, 255, 0.95);
+  --panel-strong: rgba(255, 255, 255, 0.98);
+  --line: rgba(0, 0, 0, 0.08);
+  --text: #1a2b25;
+  --muted: #5a7068;
+  --shadow: 0 24px 56px rgba(58, 80, 70, 0.12);
+  --surface-soft: rgba(16, 34, 28, 0.045);
+  --surface-strong: rgba(16, 34, 28, 0.06);
+  --surface-border: rgba(26, 43, 37, 0.1);
+  --grid-line: rgba(20, 34, 28, 0.06);
+  --warning-bg: rgba(244, 194, 91, 0.18);
+  --warning-border: rgba(198, 142, 24, 0.28);
+  --warning-text: #8a5a00;
+  --chart-bg: rgba(18, 40, 33, 0.05);
+  --chart-grid: rgba(20, 38, 32, 0.12);
+  --chart-axis-text: #5a7068;
+  --chart-title: #1a2b25;
+  --chart-line: #1d8f66;
+  --chart-band-fill: rgba(29, 143, 102, 0.14);
+  --chart-point: #1d8f66;
+  --chart-point-current: #d9911f;
+  --chart-track: rgba(26, 43, 37, 0.08);
+  --chart-positive: #1d8f66;
+  --chart-negative: #cf6a32;
+  --map-stage-start: rgba(237, 245, 241, 0.95);
+  --map-stage-end: rgba(228, 238, 233, 0.98);
+  --map-stage-glow: rgba(29, 143, 102, 0.08);
+  --control-bg: rgba(255, 255, 255, 0.92);
+  --popup-bg: rgba(255, 255, 255, 0.96);
 }
 
 * {
@@ -16,6 +76,10 @@
 html {
   scroll-behavior: smooth;
   color-scheme: dark;
+}
+
+html.light {
+  color-scheme: light;
 }
 
 body {
@@ -30,13 +94,20 @@ body {
   overflow-x: hidden;
 }
 
+html.light body {
+  background:
+    radial-gradient(circle at top left, rgba(104, 181, 147, 0.14), transparent 28%),
+    radial-gradient(circle at 82% 16%, rgba(244, 194, 91, 0.16), transparent 22%),
+    linear-gradient(160deg, #eef4f2 0%, #f7f9f8 52%, #edf2f0 100%);
+}
+
 body::before {
   content: "";
   position: fixed;
   inset: 0;
   background-image:
-    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
   background-size: 42px 42px;
   mask-image: radial-gradient(circle at center, black, transparent 78%);
   pointer-events: none;
@@ -139,7 +210,7 @@ a {
   text-transform: uppercase;
   letter-spacing: 0.16em;
   font-size: 0.72rem;
-  color: #93e3be;
+  color: var(--accent-cool);
 }
 
 .nav-links {
@@ -167,8 +238,8 @@ a {
 .nav-link {
   padding: 10px 14px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--surface-soft);
+  border: 1px solid var(--surface-border);
   color: var(--muted);
 }
 
@@ -180,7 +251,7 @@ a {
 .status-pill {
   padding: 10px 14px;
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--surface-soft);
   min-width: 172px;
 }
 
@@ -188,7 +259,7 @@ a {
   margin: 0 0 18px;
   padding: 12px 14px;
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--surface-soft);
   width: fit-content;
 }
 
@@ -271,8 +342,8 @@ a {
 .feed-item {
   padding: 18px;
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--surface-soft);
+  border: 1px solid var(--surface-border);
 }
 
 .summary-card strong,
@@ -297,6 +368,17 @@ a {
 
 .loading-panel {
   padding: 42px 24px;
+}
+
+.data-warning-banner {
+  background: var(--warning-bg);
+  border: 1px solid var(--warning-border);
+  border-radius: 8px;
+  padding: 10px 18px;
+  margin: 0 0 16px;
+  font-size: 0.84rem;
+  color: var(--warning-text);
+  line-height: 1.5;
 }
 
 .panel-heading {
@@ -334,9 +416,9 @@ a {
   border-radius: 26px;
   overflow: hidden;
   background:
-    radial-gradient(circle at 50% 10%, rgba(127, 224, 184, 0.12), transparent 30%),
-    linear-gradient(180deg, rgba(10, 36, 31, 0.98), rgba(5, 19, 16, 0.95));
-  border: 1px solid rgba(255, 255, 255, 0.06);
+    radial-gradient(circle at 50% 10%, var(--map-stage-glow), transparent 30%),
+    linear-gradient(180deg, var(--map-stage-start), var(--map-stage-end));
+  border: 1px solid var(--surface-border);
 }
 
 .map-stage--leaflet {
@@ -355,19 +437,19 @@ a {
 }
 
 .india-map--leaflet .leaflet-control-zoom a {
-  background: rgba(8, 20, 18, 0.92);
+  background: var(--control-bg);
   color: var(--text);
-  border-bottom-color: rgba(255, 255, 255, 0.08);
+  border-bottom-color: var(--surface-border);
 }
 
 .india-map--leaflet .leaflet-control-attribution {
-  background: rgba(8, 20, 18, 0.75);
+  background: var(--control-bg);
   color: var(--muted);
 }
 
 .india-map--leaflet .leaflet-popup-content-wrapper,
 .india-map--leaflet .leaflet-popup-tip {
-  background: rgba(9, 27, 23, 0.96);
+  background: var(--popup-bg);
   color: var(--text);
 }
 
@@ -393,8 +475,8 @@ a {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
   background-size: 56px 56px;
   mask-image: radial-gradient(circle at center, black, transparent 78%);
 }
@@ -410,9 +492,9 @@ a {
   gap: 4px;
   min-width: 112px;
   padding: 12px 14px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  border: 1px solid var(--surface-border);
   border-radius: 18px;
-  background: rgba(4, 12, 10, 0.72);
+  background: color-mix(in srgb, var(--panel) 78%, transparent);
   color: var(--text);
   box-shadow: 0 18px 26px rgba(0, 0, 0, 0.3);
   cursor: pointer;
@@ -449,7 +531,7 @@ a {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #dbe8e2;
+  color: var(--chart-title);
   font-size: 0.86rem;
 }
 
@@ -494,7 +576,7 @@ a {
   padding: 18px;
   border-radius: 20px;
   background: var(--panel-strong);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--surface-border);
 }
 
 .subpanel-heading {
@@ -515,7 +597,7 @@ a {
   justify-content: space-between;
   gap: 12px;
   padding: 12px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-bottom: 1px solid var(--surface-border);
 }
 
 .metric-row {
@@ -533,7 +615,7 @@ a {
   height: 12px;
   border-radius: 999px;
   overflow: hidden;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--chart-track);
 }
 
 .metric-fill {
@@ -549,8 +631,8 @@ a {
   flex: 1 1 150px;
   padding: 16px 18px;
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--surface-soft);
+  border: 1px solid var(--surface-border);
 }
 
 .aqi-badge,
@@ -601,9 +683,9 @@ a {
 .secondary-action,
 .profile-pill {
   padding: 12px 16px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--surface-strong);
   color: var(--text);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--surface-border);
 }
 
 .profile-pill.active {
@@ -628,8 +710,8 @@ a {
   border-radius: 24px;
   background:
     radial-gradient(circle at top right, rgba(244, 194, 91, 0.16), transparent 26%),
-    rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+    var(--surface-soft);
+  border: 1px solid var(--surface-border);
 }
 
 .advisory-title {
@@ -641,7 +723,7 @@ a {
 
 .advisory-level {
   padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--surface-strong);
 }
 
 .advisory-card p {
@@ -673,9 +755,9 @@ a {
 .report-form select,
 .report-form textarea {
   width: 100%;
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  border: 1px solid var(--surface-border);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--surface-strong);
   color: var(--text);
   padding: 14px 16px;
 }
@@ -692,10 +774,75 @@ a {
 .feed-badge {
   display: inline-flex;
   padding: 4px 8px;
-  background: rgba(244, 194, 91, 0.12);
-  color: #f4c25b;
+  background: color-mix(in srgb, var(--accent-warm) 18%, transparent);
+  color: var(--accent-warm);
   font-size: 0.76rem;
   font-weight: 700;
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.last-updated {
+  margin-top: 6px;
+}
+
+.theme-toggle {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  border: 1px solid var(--surface-border);
+  background: var(--surface-soft);
+  color: var(--text);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.theme-toggle:hover,
+.theme-toggle:focus-visible {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--accent-cool) 42%, var(--surface-border));
+}
+
+.station-trend {
+  display: grid;
+  gap: 12px;
+}
+
+.station-trend-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.station-trend-header h3 {
+  margin: 0 0 4px;
+}
+
+.station-trend-header p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.station-trend-header strong {
+  color: var(--chart-title);
+  font-size: 0.88rem;
+}
+
+.station-trend-chart,
+.shap-summary-chart {
+  width: 100%;
+}
+
+.shap-card {
+  display: grid;
+  gap: 16px;
 }
 
 .report-feed-list {
@@ -740,6 +887,11 @@ h3 {
   .legend {
     justify-content: flex-start;
   }
+
+  .topbar-right,
+  .station-trend-header {
+    width: 100%;
+  }
 }
 
 @media (max-width: 720px) {
@@ -772,5 +924,18 @@ h3 {
   .station-button {
     min-width: 88px;
     padding: 10px 11px;
+  }
+
+  .topbar-right {
+    align-items: stretch;
+  }
+
+  .theme-toggle {
+    width: 100%;
+    height: 42px;
+  }
+
+  .station-trend-header {
+    flex-direction: column;
   }
 }

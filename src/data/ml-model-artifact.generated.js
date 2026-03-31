@@ -1,5 +1,5 @@
 const artifact = {
-  "version": "indipoll-lstm-v2-2026-03-29",
+  "version": "indipoll-lstm-v3.0-2026-03-29",
   "trainedAt": "2026-03-29T18:47:18.759Z",
   "lookback": 24,
   "horizon": 12,

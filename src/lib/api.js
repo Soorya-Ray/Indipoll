@@ -61,7 +61,8 @@ async function buildSeedStationSnapshot(seedStation) {
 export async function fetchStationsBundle(seedStations) {
   const dashboardRows = await fetchStationDashboard(seedStations);
   if (dashboardRows?.length) {
-    return dashboardRows;
+    console.info("[indipoll] Loaded stations from Supabase dashboard view");
+    return { stations: dashboardRows, source: "supabase" };
   }
 
   try {
@@ -78,18 +79,25 @@ export async function fetchStationsBundle(seedStations) {
       throw new Error("Live bundle did not return stations");
     }
 
-    return payload.stations.map((station) => {
-      const fallback = seedStations.find((item) => item.id === station.id || item.city === station.city);
-      return {
-        ...fallback,
-        ...station,
-        weather: station.weather || fallback?.weather,
-        forecast: station.forecast || fallback?.forecast || buildForecastSeries(station.aqi || fallback?.aqi || 100, station.city),
-        shap: station.shap || fallback?.shap || buildShapNarratives(station),
-        model: station.model || fallback?.model,
-      };
-    });
-  } catch {
-    return Promise.all(seedStations.map((station) => buildSeedStationSnapshot(station)));
+    console.info("[indipoll] Loaded stations from live-bundle API");
+    return {
+      stations: payload.stations.map((station) => {
+        const fallback = seedStations.find((item) => item.id === station.id || item.city === station.city);
+        return {
+          ...fallback,
+          ...station,
+          weather: station.weather || fallback?.weather,
+          forecast: station.forecast || fallback?.forecast || buildForecastSeries(station.aqi || fallback?.aqi || 100, station.city),
+          shap: station.shap || fallback?.shap || buildShapNarratives(station),
+          model: station.model || fallback?.model,
+          rawUpdatedAt: station.rawUpdatedAt || station.updated_at || fallback?.rawUpdatedAt || null,
+        };
+      }),
+      source: "live-bundle",
+    };
+  } catch (err) {
+    console.warn("[indipoll] Live sources unavailable, falling back to seed data:", err.message || err);
+    const stations = await Promise.all(seedStations.map((station) => buildSeedStationSnapshot(station)));
+    return { stations, source: "seed" };
   }
 }
