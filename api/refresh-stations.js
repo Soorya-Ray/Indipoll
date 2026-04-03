@@ -1,6 +1,5 @@
 import { buildServerStationSnapshot } from "./_shared/live-data.js";
 import { seedStations } from "../src/data/cities.js";
-import { generateForecastPayload } from "../src/lib/model-service.js";
 import { stationToFeatureVector, LOOKBACK_STEPS } from "../src/lib/ml-sequence.js";
 import { getAdminSupabaseClient, loadActiveModelArtifact } from "./_shared/model-registry.js";
 
@@ -112,25 +111,18 @@ export default async function handler(request, response) {
     );
 
     const historyBySlug = new Map(observationHistory);
-    const snapshotRows = snapshots.map((station) => {
-      const forecastPayload = generateForecastPayload(station, {
-        historyRows: historyBySlug.get(station.id) || [],
-        artifact: activeArtifact,
-      });
-
-      return {
-        station_id: idBySlug.get(station.id),
-        aqi: station.aqi,
-        pollutants: station.pollutants,
-        sources: station.sources,
-        weather: station.weather,
-        forecast: forecastPayload.forecast,
-        shap: forecastPayload.shap,
-        model_metadata: forecastPayload.model,
-        data_mode: station.dataMode === "waqi" ? "waqi" : "hybrid",
-        forecast_mode: station.forecastMode === "live" ? "live" : "synthetic",
-      };
-    });
+    const snapshotRows = snapshots.map((station) => ({
+      station_id: idBySlug.get(station.id),
+      aqi: station.aqi,
+      pollutants: station.pollutants,
+      sources: station.sources,
+      weather: station.weather,
+      forecast: station.forecast,
+      shap: station.shap,
+      model_metadata: station.model,
+      data_mode: station.dataMode === "waqi" ? "waqi" : "hybrid",
+      forecast_mode: station.forecastMode === "live" ? "live" : "synthetic",
+    }));
 
     const { error: snapshotsError } = await supabase.from("station_snapshots").upsert(snapshotRows, {
       onConflict: "station_id",
