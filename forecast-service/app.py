@@ -2,6 +2,7 @@
 
 import logging
 import os
+import threading
 import traceback
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -20,16 +21,26 @@ CRON_SECRET = os.environ.get("CRON_SECRET", "")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """On startup, try to load a previously trained model or train a new one."""
+    """On startup, load a saved model or kick off training in the background.
+
+    Running train() in a background thread lets uvicorn open the port immediately
+    so Render's health check passes. /health returns 'no-model' until training
+    finishes (~60s), then flips to 'healthy'. Vercel falls back to the JS model
+    during that window.
+    """
     logger.info("Starting up forecast service...")
 
     if not load_models_from_disk():
-        logger.info("No saved models found, attempting initial training...")
-        try:
-            train()
-            logger.info("Initial training complete.")
-        except Exception as e:
-            logger.warning("Initial training failed (will retry on /retrain): %s", e)
+        logger.info("No saved models found, starting background training...")
+
+        def _bg_train():
+            try:
+                train()
+                logger.info("Background training complete.")
+            except Exception as e:
+                logger.warning("Background training failed (retry via /retrain): %s", e)
+
+        threading.Thread(target=_bg_train, daemon=True).start()
 
     yield
     logger.info("Shutting down forecast service.")
